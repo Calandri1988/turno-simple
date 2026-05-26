@@ -2,6 +2,8 @@ const root = document.querySelector("#wizard-root");
 const progress = document.querySelector("#wizard-progress");
 const businessNameElement = document.querySelector("#business-name");
 const businessMetaElement = document.querySelector("#business-meta");
+const assistantTitleElement = document.querySelector("#assistant-title");
+const assistantMessageElement = document.querySelector("#assistant-message");
 
 const parts = window.location.pathname.split("/").filter(Boolean);
 const BUSINESS_SLUG = parts[0] || "demo";
@@ -150,8 +152,9 @@ function renderProgress() {
     .join("");
 }
 
-function renderLayout(title, subtitle, content) {
+function renderLayout(title, subtitle, assistantMessage, content) {
   renderProgress();
+  assistantMessageElement.textContent = assistantMessage;
   root.innerHTML = `
     <div class="wizard-step">
       <div class="step-copy">
@@ -168,6 +171,7 @@ function renderServices() {
   renderLayout(
     "Reserva tu turno en pocos pasos",
     "Elegi el servicio que necesitas",
+    "Primero elegi que necesitas.",
     `<div class="choice-grid">${services.map((service) => `
       <button class="choice-card" type="button" data-service="${escapeHtml(service.id)}">
         <strong>${escapeHtml(service.name)}</strong>
@@ -183,6 +187,7 @@ function renderProfessionals() {
   renderLayout(
     "Ahora elegi con quien queres atenderte",
     "Tambien podes elegir cualquiera disponible",
+    "Podes elegir un profesional o dejar que el sistema busque uno disponible.",
     `<div class="choice-grid">
       <button class="choice-card" type="button" data-professional-mode="any">
         <strong>Cualquiera disponible</strong>
@@ -205,6 +210,7 @@ function renderDateTime() {
   renderLayout(
     "Estos son los horarios disponibles",
     "Elegi una fecha y despues el horario que prefieras",
+    "Estos son los horarios libres para vos.",
     `<div class="date-strip">
       ${dates.map((date) => `
         <button class="${state.date?.date === date.date ? "selected" : ""}" type="button" data-date="${date.date}">
@@ -224,6 +230,7 @@ function renderCustomer() {
   renderLayout(
     "Ya casi terminamos",
     "Dejanos tus datos para confirmar la reserva",
+    "Dejanos tus datos para confirmar el turno.",
     `<form class="wizard-form" id="booking-form">
       <label>
         <span>Como te llamas?</span>
@@ -390,6 +397,8 @@ async function init() {
     const business = await businessResponse.json();
     businessName = business.name || "Turno Simple";
     businessNameElement.textContent = businessName;
+    assistantTitleElement.textContent = `Hola, soy el asistente de turnos de ${businessName}.`;
+    assistantMessageElement.textContent = "Te ayudo a reservar en pocos pasos.";
     const meta = [business.category, business.city].filter(Boolean).join(" - ");
     businessMetaElement.textContent = meta;
     businessMetaElement.hidden = !meta;
