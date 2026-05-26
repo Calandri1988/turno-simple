@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Turno Simple</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="chat-card" aria-label="Reserva de turnos">
+        <header class="chat-header">
+          <div>
+            <p class="eyebrow">Reservas online</p>
+            <h1 id="business-name">Turno Simple</h1>
+            <p id="business-meta" class="business-meta"></p>
+          </div>
+          <span class="status">Disponible</span>
+        </header>
+
+        <div id="chat" class="chat-window" aria-live="polite"></div>
+
+        <footer class="chat-actions">
+          <div id="options" class="options" aria-label="Opciones de reserva"></div>
+          <button id="restart" class="secondary-button" type="button" hidden>
+            Reservar otro turno
+          </button>
+        </footer>
+      </section>
+
+      <aside class="admin-panel" aria-label="Panel admin de turnos">
+        <header class="admin-header">
+          <div>
+            <p class="eyebrow">Admin simple</p>
+            <h2>Turnos reservados</h2>
+          </div>
+          <span id="admin-count" class="admin-count">0</span>
+        </header>
+
+        <div id="admin-list" class="admin-list" aria-live="polite"></div>
+
+        <button id="clear-reservations" class="danger-button" type="button" disabled>
+          Borrar turnos de prueba
+        </button>
+      </aside>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
