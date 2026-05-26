@@ -161,8 +161,12 @@ function setStep(step) {
 }
 
 function renderProgress() {
-  progress.innerHTML = [1, 2, 3, 4]
-    .map((step) => `<span class="${step <= state.step ? "active" : ""}">${step}</span>`)
+  const labels = ["Servicio", "Profesional", "Horario", "Datos"];
+  progress.innerHTML = labels
+    .map((label, index) => {
+      const step = index + 1;
+      return `<span class="${step <= state.step ? "active" : ""}"><b>${step}</b><small>${label}</small></span>`;
+    })
     .join("");
 }
 
