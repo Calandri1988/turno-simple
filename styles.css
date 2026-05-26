@@ -450,6 +450,15 @@ h2 {
   color: var(--muted);
 }
 
+.choice-card .deposit-note {
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #fff4e8;
+  color: #9a4b05;
+  font-weight: 700;
+}
+
 .choice-card:focus,
 .choice-card:hover,
 .date-strip button.selected,
@@ -494,9 +503,12 @@ h2 {
 }
 
 .wizard-form input,
+.wizard-form textarea,
 .admin-form input,
+.admin-form textarea,
 .admin-form select,
 .admin-inline-form input,
+.admin-inline-form textarea,
 .admin-inline-form select,
 .admin-filter input,
 .agenda-row select {
@@ -509,6 +521,14 @@ h2 {
   background: #fff;
 }
 
+.wizard-form textarea,
+.admin-form textarea,
+.admin-inline-form textarea {
+  min-height: 74px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
 .summary-box {
   display: grid;
   gap: 5px;
@@ -518,12 +538,33 @@ h2 {
   background: var(--panel-soft);
 }
 
+.deposit-box {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid #f2c28d;
+  border-radius: 8px;
+  background: #fff8ef;
+}
+
+.deposit-box span,
+.deposit-box small {
+  color: #80520f;
+}
+
 .primary-button {
   padding: 0 16px;
   border-color: var(--brand);
   background: var(--brand);
   color: #fff;
   font-weight: 700;
+}
+
+.link-button {
+  display: inline-grid;
+  place-items: center;
+  min-height: 48px;
+  text-decoration: none;
 }
 
 .text-button {
@@ -591,12 +632,56 @@ h2 {
   color: var(--muted);
 }
 
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.status-pendiente {
+  background: #fff4e8;
+  color: #9a4b05;
+}
+
+.status-confirmado,
+.status-asistio {
+  background: #e9f8f0;
+  color: #17613f;
+}
+
+.status-cancelado,
+.status-no_asistio {
+  background: #fdecec;
+  color: #9f1d1d;
+}
+
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.check-field input {
+  width: auto;
+  min-height: auto;
+}
+
 .admin-form {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .admin-inline-form {
-  grid-template-columns: 130px repeat(3, minmax(0, 1fr)) auto auto;
+  grid-template-columns: 120px repeat(6, minmax(0, 1fr)) auto auto;
   align-items: center;
 }
 

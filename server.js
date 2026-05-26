@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "turnos.sqlite");
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
-const reservationStatuses = new Set(["reservado", "confirmado", "cancelado", "asistio", "no_asistio"]);
+const reservationStatuses = new Set(["pendiente", "reservado", "confirmado", "cancelado", "asistio", "no_asistio"]);
 const adminRoles = new Set(["owner", "staff"]);
 
 const servicesSeed = [
@@ -87,9 +87,24 @@ async function ensureBusinessesTable() {
       slug TEXT NOT NULL UNIQUE,
       category TEXT,
       city TEXT,
+      whatsapp TEXT NOT NULL DEFAULT '',
+      address TEXT NOT NULL DEFAULT '',
+      payment_alias TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  const columns = await db.all("PRAGMA table_info(businesses)");
+  const columnNames = new Set(columns.map((column) => column.name));
+  if (!columnNames.has("whatsapp")) {
+    await db.exec("ALTER TABLE businesses ADD COLUMN whatsapp TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columnNames.has("address")) {
+    await db.exec("ALTER TABLE businesses ADD COLUMN address TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columnNames.has("payment_alias")) {
+    await db.exec("ALTER TABLE businesses ADD COLUMN payment_alias TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 async function ensureDemoBusiness() {
@@ -152,6 +167,9 @@ async function createServicesTable(tableName) {
       name TEXT NOT NULL,
       duration_minutes INTEGER NOT NULL,
       price REAL,
+      requires_deposit INTEGER NOT NULL DEFAULT 0,
+      deposit_amount INTEGER NOT NULL DEFAULT 0,
+      payment_instructions TEXT NOT NULL DEFAULT '',
       PRIMARY KEY (business_id, id),
       FOREIGN KEY (business_id) REFERENCES businesses(id)
     )
@@ -161,6 +179,9 @@ async function createServicesTable(tableName) {
 async function ensureServicesTable(demoBusinessId) {
   const columns = await db.all("PRAGMA table_info(services)");
   const hasBusinessId = columns.some((column) => column.name === "business_id");
+  const hasRequiresDeposit = columns.some((column) => column.name === "requires_deposit");
+  const hasDepositAmount = columns.some((column) => column.name === "deposit_amount");
+  const hasPaymentInstructions = columns.some((column) => column.name === "payment_instructions");
 
   if (columns.length === 0) {
     await createServicesTable("services");
@@ -168,6 +189,15 @@ async function ensureServicesTable(demoBusinessId) {
   }
 
   if (hasBusinessId) {
+    if (!hasRequiresDeposit) {
+      await db.exec("ALTER TABLE services ADD COLUMN requires_deposit INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!hasDepositAmount) {
+      await db.exec("ALTER TABLE services ADD COLUMN deposit_amount INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!hasPaymentInstructions) {
+      await db.exec("ALTER TABLE services ADD COLUMN payment_instructions TEXT NOT NULL DEFAULT ''");
+    }
     return;
   }
 
@@ -183,11 +213,14 @@ async function ensureServicesTable(demoBusinessId) {
           business_id,
           name,
           duration_minutes,
-          price
+          price,
+          requires_deposit,
+          deposit_amount,
+          payment_instructions
         )
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
-      [row.id, demoBusinessId, row.name, row.duration_minutes, row.price],
+      [row.id, demoBusinessId, row.name, row.duration_minutes, row.price, 0, 0, ""],
     );
   }
 
@@ -535,6 +568,9 @@ function mapService(row) {
     name: row.name,
     durationMinutes: row.duration_minutes,
     price: row.price,
+    requiresDeposit: Boolean(row.requires_deposit),
+    depositAmount: row.deposit_amount || 0,
+    paymentInstructions: row.payment_instructions || "",
   };
 }
 
@@ -544,6 +580,9 @@ function mapPublicBusiness(row) {
     slug: row.slug,
     category: row.category,
     city: row.city,
+    whatsapp: row.whatsapp || "",
+    address: row.address || "",
+    paymentAlias: row.payment_alias || "",
   };
 }
 
@@ -672,6 +711,22 @@ function parseOptionalPrice(value) {
     value: number,
     valid: Number.isFinite(number) && number >= 0,
   };
+}
+
+function parseNonNegativeInteger(value) {
+  if (value === undefined || value === null || value === "") {
+    return { value: 0, valid: true };
+  }
+
+  const number = Number(value);
+  return {
+    value: number,
+    valid: Number.isInteger(number) && number >= 0,
+  };
+}
+
+function parseBooleanFlag(value) {
+  return value === true || value === "true" || value === "1" || value === 1 || value === "on" ? 1 : 0;
 }
 
 function parseWeekdayNumber(value) {
@@ -1014,6 +1069,29 @@ app.post("/api/businesses/:slug/admin/login", async (req, res) => {
   });
 });
 
+app.put("/api/businesses/:slug/admin/business", requireAdmin, async (req, res) => {
+  const business = await getBusinessOr404(req, res);
+  if (!business) return;
+
+  const whatsapp = cleanText(req.body.whatsapp);
+  const address = cleanText(req.body.address);
+  const paymentAlias = cleanText(req.body.paymentAlias ?? req.body.payment_alias);
+
+  await db.run(
+    `
+      UPDATE businesses
+      SET whatsapp = ?,
+          address = ?,
+          payment_alias = ?
+      WHERE id = ?
+    `,
+    [whatsapp, address, paymentAlias, business.id],
+  );
+
+  const updated = await db.get("SELECT * FROM businesses WHERE id = ?", business.id);
+  res.json(mapPublicBusiness(updated));
+});
+
 app.get("/api/businesses/:slug/services", async (req, res) => {
   const business = await getBusinessBySlug(req.params.slug);
   if (!business) {
@@ -1104,8 +1182,11 @@ app.post("/api/businesses/:slug/admin/services", requireAdmin, async (req, res) 
   const id = slugify(req.body.id || name);
   const durationMinutes = parseRequiredPositiveInteger(req.body.durationMinutes ?? req.body.duration_minutes);
   const price = parseOptionalPrice(req.body.price);
+  const requiresDeposit = parseBooleanFlag(req.body.requiresDeposit ?? req.body.requires_deposit);
+  const depositAmount = parseNonNegativeInteger(req.body.depositAmount ?? req.body.deposit_amount);
+  const paymentInstructions = cleanText(req.body.paymentInstructions ?? req.body.payment_instructions);
 
-  if (!id || !name || !durationMinutes || !price.valid) {
+  if (!id || !name || !durationMinutes || !price.valid || !depositAmount.valid) {
     res.status(400).json({ error: "Datos de servicio invalidos." });
     return;
   }
@@ -1113,10 +1194,19 @@ app.post("/api/businesses/:slug/admin/services", requireAdmin, async (req, res) 
   try {
     await db.run(
       `
-        INSERT INTO services (business_id, id, name, duration_minutes, price)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO services (
+          business_id,
+          id,
+          name,
+          duration_minutes,
+          price,
+          requires_deposit,
+          deposit_amount,
+          payment_instructions
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
-      [business.id, id, name, durationMinutes, price.value],
+      [business.id, id, name, durationMinutes, price.value, requiresDeposit, depositAmount.value, paymentInstructions],
     );
   } catch (error) {
     if (error && error.code === "SQLITE_CONSTRAINT") {
@@ -1141,8 +1231,11 @@ app.put("/api/businesses/:slug/admin/services/:id", requireAdmin, async (req, re
   const name = cleanText(req.body.name);
   const durationMinutes = parseRequiredPositiveInteger(req.body.durationMinutes ?? req.body.duration_minutes);
   const price = parseOptionalPrice(req.body.price);
+  const requiresDeposit = parseBooleanFlag(req.body.requiresDeposit ?? req.body.requires_deposit);
+  const depositAmount = parseNonNegativeInteger(req.body.depositAmount ?? req.body.deposit_amount);
+  const paymentInstructions = cleanText(req.body.paymentInstructions ?? req.body.payment_instructions);
 
-  if (!id || !name || !durationMinutes || !price.valid) {
+  if (!id || !name || !durationMinutes || !price.valid || !depositAmount.valid) {
     res.status(400).json({ error: "Datos de servicio invalidos." });
     return;
   }
@@ -1150,10 +1243,15 @@ app.put("/api/businesses/:slug/admin/services/:id", requireAdmin, async (req, re
   const result = await db.run(
     `
       UPDATE services
-      SET name = ?, duration_minutes = ?, price = ?
+      SET name = ?,
+          duration_minutes = ?,
+          price = ?,
+          requires_deposit = ?,
+          deposit_amount = ?,
+          payment_instructions = ?
       WHERE business_id = ? AND id = ?
     `,
-    [name, durationMinutes, price.value, business.id, id],
+    [name, durationMinutes, price.value, requiresDeposit, depositAmount.value, paymentInstructions, business.id, id],
   );
 
   if (result.changes === 0) {
@@ -1643,6 +1741,7 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
       return;
     }
 
+    const initialStatus = service.requires_deposit ? "pendiente" : "reservado";
     const result = await db.run(
       `
         INSERT INTO reservations (
@@ -1669,7 +1768,7 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
         reservation.date,
         reservation.time,
         service.duration_minutes,
-        "reservado",
+        initialStatus,
         reservation.customerName,
         reservation.customerPhone,
       ],

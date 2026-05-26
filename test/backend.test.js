@@ -275,11 +275,50 @@ test("GET /api/businesses/demo devuelve 200", async () => {
   assert.equal(response.body.name, "Turno Simple Demo");
   assert.equal(response.body.category, "General");
   assert.equal(response.body.city, "Cruz del Eje");
+  assert.equal(response.body.whatsapp, "");
+  assert.equal(response.body.address, "");
+  assert.equal(response.body.paymentAlias, "");
 });
 
 test("GET /api/businesses/slug-inexistente devuelve 404", async () => {
   const response = await request("/api/businesses/slug-inexistente");
   assert.equal(response.status, 404);
+});
+
+test("actualizar datos del negocio desde admin se refleja en negocio publico", async () => {
+  const updated = await adminRequest(`${DEMO_API}/admin/business`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      whatsapp: "351 555-1234",
+      address: "San Martin 123",
+      paymentAlias: "turno.demo.mp",
+    }),
+  });
+  const publicBusiness = await request(`${DEMO_API}`);
+
+  assert.equal(updated.status, 200);
+  assert.equal(updated.body.whatsapp, "351 555-1234");
+  assert.equal(updated.body.address, "San Martin 123");
+  assert.equal(updated.body.paymentAlias, "turno.demo.mp");
+  assert.equal(publicBusiness.body.whatsapp, "351 555-1234");
+  assert.equal(publicBusiness.body.address, "San Martin 123");
+  assert.equal(publicBusiness.body.paymentAlias, "turno.demo.mp");
+});
+
+test("usuario de otro negocio no puede actualizar datos ajenos", async () => {
+  await createOtherBusiness();
+  const login = await loginAdmin("admin@otro.com", "otro123", "otro");
+  const response = await request(`${DEMO_API}/admin/business`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${login.body.token}`,
+    },
+    body: JSON.stringify({ whatsapp: "999", address: "Otra", paymentAlias: "otro.mp" }),
+  });
+
+  assert.equal(response.status, 403);
 });
 
 test("GET /demo carga correctamente el negocio demo", async () => {
@@ -585,12 +624,117 @@ test("CRUD servicios admin funciona y no cruza negocios", async () => {
   assert.equal(deleted.status, 204);
 });
 
+test("CRUD servicios admin permite configurar seña", async () => {
+  const created = await adminRequest(`${DEMO_API}/admin/services`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "color-sena",
+      name: "Color con seña",
+      durationMinutes: 30,
+      price: 5000,
+      requiresDeposit: true,
+      depositAmount: 1500,
+      paymentInstructions: "Transferir al alias barberia.demo.mp",
+    }),
+  });
+  const updated = await adminRequest(`${DEMO_API}/admin/services/color-sena`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "Color con seña editado",
+      durationMinutes: 45,
+      price: 6000,
+      requiresDeposit: true,
+      depositAmount: 2000,
+      paymentInstructions: "Enviar comprobante por WhatsApp.",
+    }),
+  });
+
+  assert.equal(created.status, 201);
+  assert.equal(created.body.requiresDeposit, true);
+  assert.equal(created.body.depositAmount, 1500);
+  assert.equal(updated.status, 200);
+  assert.equal(updated.body.requiresDeposit, true);
+  assert.equal(updated.body.depositAmount, 2000);
+  assert.equal(updated.body.paymentInstructions, "Enviar comprobante por WhatsApp.");
+});
+
 test("no permite borrar servicio con reservas existentes", async () => {
   const created = await createReservation({ serviceId: "consulta" });
   const deleted = await adminRequest(`${DEMO_API}/admin/services/consulta`, { method: "DELETE" });
 
   assert.equal(created.status, 201);
   assert.equal(deleted.status, 409);
+});
+
+test("reserva de servicio con seña queda pendiente y ocupa horario", async () => {
+  await adminRequest(`${DEMO_API}/admin/services`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sena-test",
+      name: "Servicio seña test",
+      durationMinutes: 30,
+      requiresDeposit: true,
+      depositAmount: 1000,
+      paymentInstructions: "Transferir y enviar comprobante.",
+    }),
+  });
+  const pending = await createReservation({
+    serviceId: "sena-test",
+    professionalId: 1,
+    time: "09:00",
+  });
+  const overlap = await createReservation({
+    serviceId: "consulta",
+    professionalId: 1,
+    time: "09:00",
+  });
+
+  assert.equal(pending.status, 201);
+  assert.equal(pending.body.status, "pendiente");
+  assert.equal(overlap.status, 409);
+});
+
+test("negocio con alias expone datos de pago para servicio con seña sin instrucciones", async () => {
+  await adminRequest(`${DEMO_API}/admin/business`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ whatsapp: "3515555555", address: "Local demo", paymentAlias: "alias.demo.mp" }),
+  });
+  await adminRequest(`${DEMO_API}/admin/services`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sena-alias",
+      name: "Servicio con alias",
+      durationMinutes: 30,
+      requiresDeposit: true,
+      depositAmount: 1000,
+      paymentInstructions: "",
+    }),
+  });
+
+  const business = await request(`${DEMO_API}`);
+  const servicesResponse = await request(`${DEMO_API}/services`);
+  const service = servicesResponse.body.find((item) => item.id === "sena-alias");
+
+  assert.equal(business.body.paymentAlias, "alias.demo.mp");
+  assert.equal(business.body.whatsapp, "3515555555");
+  assert.equal(service.requiresDeposit, true);
+  assert.equal(service.paymentInstructions, "");
+});
+
+test("reserva de servicio sin seña queda reservado", async () => {
+  const response = await createReservation({
+    serviceId: "consulta",
+    professionalId: 1,
+    time: "09:00",
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal(response.body.status, "reservado");
 });
 
 test("CRUD profesionales admin funciona y no cruza negocios", async () => {
@@ -797,6 +941,31 @@ test("PATCH status valido actualiza correctamente", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(response.body.status, "asistio");
+});
+
+test("admin puede cambiar pendiente a confirmado", async () => {
+  await adminRequest(`${DEMO_API}/admin/services`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sena-confirmar",
+      name: "Seña confirmar",
+      durationMinutes: 30,
+      requiresDeposit: true,
+      depositAmount: 1200,
+      paymentInstructions: "Transferir.",
+    }),
+  });
+  const created = await createReservation({ serviceId: "sena-confirmar", professionalId: 1, time: "09:00" });
+  const response = await adminRequest(`${DEMO_API}/admin/reservations/${created.body.id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "confirmado" }),
+  });
+
+  assert.equal(created.body.status, "pendiente");
+  assert.equal(response.status, 200);
+  assert.equal(response.body.status, "confirmado");
 });
 
 test("PATCH status no permite modificar reserva de otro negocio", async () => {

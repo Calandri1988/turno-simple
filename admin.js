@@ -9,13 +9,18 @@ const BUSINESS_API_URL = `/api/businesses/${BUSINESS_SLUG}`;
 const TOKEN_KEY = `turno-simple-admin-token-${BUSINESS_SLUG}`;
 
 const weekdayLabels = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
-const statusOptions = ["reservado", "confirmado", "cancelado", "asistio", "no_asistio"];
+const statusOptions = ["pendiente", "reservado", "confirmado", "cancelado", "asistio", "no_asistio"];
 const services = [];
 const professionals = [];
 const schedules = [];
 const agenda = [];
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let businessName = "Turno Simple";
+let businessDetails = {
+  whatsapp: "",
+  address: "",
+  paymentAlias: "",
+};
 let filterDate = toIsoDate(new Date());
 
 function escapeHtml(value) {
@@ -66,6 +71,9 @@ function normalizeService(item) {
     name: String(item.name || ""),
     durationMinutes: Number(item.durationMinutes) || 0,
     price: item.price === null || item.price === undefined ? "" : Number(item.price),
+    requiresDeposit: Boolean(item.requiresDeposit),
+    depositAmount: Number(item.depositAmount) || 0,
+    paymentInstructions: String(item.paymentInstructions || ""),
   };
 }
 
@@ -85,6 +93,17 @@ function normalizeSchedule(item) {
     startTime: String(item.startTime || ""),
     endTime: String(item.endTime || ""),
     intervalMinutes: Number(item.intervalMinutes) || 0,
+  };
+}
+
+function normalizeBusiness(item) {
+  return {
+    name: String(item.name || ""),
+    category: String(item.category || ""),
+    city: String(item.city || ""),
+    whatsapp: String(item.whatsapp || item.phone || ""),
+    address: String(item.address || ""),
+    paymentAlias: String(item.paymentAlias || item.payment_alias || ""),
   };
 }
 
@@ -128,9 +147,11 @@ async function loadBusiness() {
     return false;
   }
   const business = await response.json();
-  businessName = business.name || "Turno Simple";
+  const normalized = normalizeBusiness(business);
+  businessName = normalized.name || "Turno Simple";
+  businessDetails = normalized;
   businessNameElement.textContent = businessName;
-  const meta = [business.category, business.city].filter(Boolean).join(" - ");
+  const meta = [normalized.category, normalized.city, normalized.address].filter(Boolean).join(" - ");
   businessMetaElement.textContent = meta;
   businessMetaElement.hidden = !meta;
   document.title = `${businessName} - Admin`;
@@ -213,6 +234,10 @@ function statusSelect(reservation) {
   `;
 }
 
+function statusBadge(status) {
+  return `<span class="status-badge status-${escapeHtml(status)}">${escapeHtml(status)}</span>`;
+}
+
 function renderAgendaList(items, emptyText) {
   if (items.length === 0) {
     return `<div class="admin-empty"><strong>${escapeHtml(emptyText)}</strong></div>`;
@@ -220,11 +245,12 @@ function renderAgendaList(items, emptyText) {
   return items.map((reservation) => `
     <article class="agenda-row">
       <div>
-        <strong>${escapeHtml(reservation.time)} - ${escapeHtml(reservation.customerName)}</strong>
+        <strong>${escapeHtml(reservation.time)} - ${escapeHtml(reservation.customerName)} ${statusBadge(reservation.status)}</strong>
         <span>${escapeHtml(reservation.serviceName)} con ${escapeHtml(reservation.professionalName)}</span>
         <small>${escapeHtml(formatDateLabel(reservation.date))} - ${escapeHtml(reservation.customerPhone)}</small>
       </div>
       ${statusSelect(reservation)}
+      ${reservation.status === "pendiente" ? `<button class="secondary-button" type="button" data-action="confirm-deposit" data-id="${reservation.id}">Confirmar seña recibida</button>` : ""}
       <button class="secondary-button" type="button" data-action="whatsapp" data-id="${reservation.id}">WhatsApp</button>
       <button class="danger-button" type="button" data-action="cancel-status" data-id="${reservation.id}">Cancelar</button>
     </article>
@@ -244,6 +270,9 @@ function renderServices() {
         <input name="name" placeholder="Nombre" required />
         <input name="durationMinutes" type="number" min="1" placeholder="Minutos" required />
         <input name="price" type="number" min="0" step="0.01" placeholder="Precio" />
+        <label class="check-field"><input name="requiresDeposit" type="checkbox" value="1" /> Requiere seña</label>
+        <input name="depositAmount" type="number" min="0" step="1" placeholder="Seña" />
+        <textarea name="paymentInstructions" placeholder="Instrucciones de pago"></textarea>
         <button class="primary-button" type="submit">Crear</button>
       </form>
       ${services.map((service) => `
@@ -252,10 +281,27 @@ function renderServices() {
           <input name="name" value="${escapeHtml(service.name)}" />
           <input name="durationMinutes" type="number" min="1" value="${service.durationMinutes}" />
           <input name="price" type="number" min="0" step="0.01" value="${service.price === "" ? "" : escapeHtml(service.price)}" />
+          <label class="check-field"><input name="requiresDeposit" type="checkbox" value="1" ${service.requiresDeposit ? "checked" : ""} /> Seña</label>
+          <input name="depositAmount" type="number" min="0" step="1" value="${service.depositAmount}" />
+          <textarea name="paymentInstructions">${escapeHtml(service.paymentInstructions)}</textarea>
           <button class="secondary-button" type="submit">Guardar</button>
           <button class="danger-button" type="button" data-action="delete-service" data-id="${escapeHtml(service.id)}">Eliminar</button>
         </form>
       `).join("")}
+    </section>
+  `;
+}
+
+function renderBusinessSettings() {
+  return `
+    <section class="admin-section">
+      <h2>Datos del negocio</h2>
+      <form class="admin-form business-form" data-form="business-update">
+        <input name="whatsapp" placeholder="WhatsApp del negocio" value="${escapeHtml(businessDetails.whatsapp)}" />
+        <input name="address" placeholder="Direccion" value="${escapeHtml(businessDetails.address)}" />
+        <input name="paymentAlias" placeholder="Alias de pago" value="${escapeHtml(businessDetails.paymentAlias)}" />
+        <button class="primary-button" type="submit">Guardar datos</button>
+      </form>
     </section>
   `;
 }
@@ -328,6 +374,7 @@ async function renderAdmin() {
       <h2>Proximos turnos</h2>
       <div class="agenda-list">${renderAgendaList(upcoming, "No hay proximos turnos.")}</div>
     </section>
+    ${renderBusinessSettings()}
     ${renderServices()}
     ${renderProfessionals()}
     ${renderSchedules()}
@@ -355,6 +402,14 @@ root.addEventListener("submit", async (event) => {
     }
     if (form.id === "filter-form") {
       filterDate = data.date || "";
+      await refresh();
+      return;
+    }
+    if (form.dataset.form === "business-update") {
+      const updated = await sendJson(`${BUSINESS_API_URL}/admin/business`, "PUT", data);
+      businessDetails = normalizeBusiness(updated);
+      businessNameElement.textContent = businessName;
+      await loadBusiness();
       await refresh();
       return;
     }
@@ -391,6 +446,11 @@ root.addEventListener("click", async (event) => {
   }
   if (action === "cancel-status") {
     await sendJson(`${BUSINESS_API_URL}/admin/reservations/${id}/status`, "PATCH", { status: "cancelado" });
+    await refresh();
+    return;
+  }
+  if (action === "confirm-deposit") {
+    await sendJson(`${BUSINESS_API_URL}/admin/reservations/${id}/status`, "PATCH", { status: "confirmado" });
     await refresh();
     return;
   }

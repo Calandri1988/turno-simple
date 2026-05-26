@@ -13,6 +13,9 @@ const weekdayLabels = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Vie
 const services = [];
 const professionals = [];
 let businessName = "Turno Simple";
+let businessPhone = "";
+let businessAddress = "";
+let businessPaymentAlias = "";
 
 const state = {
   step: 1,
@@ -69,7 +72,18 @@ function normalizeService(service) {
     name: String(service.name || ""),
     durationMinutes: Number(service.durationMinutes) || 0,
     price: service.price === null || service.price === undefined ? null : Number(service.price),
+    requiresDeposit: Boolean(service.requiresDeposit),
+    depositAmount: Number(service.depositAmount) || 0,
+    paymentInstructions: String(service.paymentInstructions || ""),
   };
+}
+
+function servicePaymentInstructions(service) {
+  if (service.paymentInstructions) return service.paymentInstructions;
+  if (service.requiresDeposit && businessPaymentAlias) {
+    return `Transferi la seña al alias: ${businessPaymentAlias}`;
+  }
+  return "";
 }
 
 function normalizeProfessional(professional) {
@@ -177,6 +191,7 @@ function renderServices() {
         <strong>${escapeHtml(service.name)}</strong>
         <span>${service.durationMinutes ? `${service.durationMinutes} min` : "Duracion a confirmar"}</span>
         ${service.price !== null ? `<small>${escapeHtml(formatPrice(service.price))}</small>` : ""}
+        ${service.requiresDeposit ? `<small class="deposit-note">Requiere seña</small>` : ""}
       </button>
     `).join("")}</div>`,
   );
@@ -227,6 +242,15 @@ function renderDateTime() {
 
 function renderCustomer() {
   const professionalName = state.professionalMode === "any" ? "Cualquiera disponible" : state.professional.name;
+  const paymentInstructions = servicePaymentInstructions(state.service);
+  const depositInfo = state.service.requiresDeposit
+    ? `<div class="deposit-box">
+        <strong>Este turno requiere una seña para quedar confirmado.</strong>
+        <span>Seña: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
+        ${paymentInstructions ? `<span>${escapeHtml(paymentInstructions)}</span>` : ""}
+        <small>Tu turno quedara pendiente hasta que el negocio confirme la recepcion.</small>
+      </div>`
+    : "";
   renderLayout(
     "Ya casi terminamos",
     "Dejanos tus datos para confirmar la reserva",
@@ -244,7 +268,9 @@ function renderCustomer() {
         <strong>Resumen</strong>
         <span>${escapeHtml(state.service.name)} con ${escapeHtml(professionalName)}</span>
         <span>${escapeHtml(state.date.label)} a las ${escapeHtml(state.time)}</span>
+        <span>${escapeHtml(state.customerName || "Tu nombre")} - ${escapeHtml(state.customerPhone || "Tu WhatsApp")}</span>
       </div>
+      ${depositInfo}
       <p class="form-error" id="form-error" hidden>Completa nombre y telefono para confirmar.</p>
       <button class="primary-button" type="submit">Confirmar turno</button>
       <button class="text-button" type="button" data-back="3">Volver</button>
@@ -253,6 +279,29 @@ function renderCustomer() {
 }
 
 function renderSuccess() {
+  const phone = normalizePhoneForWhatsapp(businessPhone);
+  const paymentInstructions = servicePaymentInstructions(state.service);
+  const depositMessage = `Hola, hice una reserva en ${businessName} para el dia ${state.date.label} a las ${state.time}. Te envio el comprobante de la seña.`;
+  if (state.service.requiresDeposit) {
+    progress.innerHTML = "";
+    root.innerHTML = `
+      <div class="success-screen">
+        <p>Pendiente</p>
+        <h2>Tu turno quedo pendiente de confirmacion</h2>
+        <span>Para confirmarlo, envia el comprobante al negocio.</span>
+        <div class="summary-box">
+          <strong>${escapeHtml(state.service.name)}</strong>
+          <span>${escapeHtml(state.assignedProfessionalName)} - ${escapeHtml(state.date.label)} ${escapeHtml(state.time)}</span>
+          <span>Seña: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
+          ${paymentInstructions ? `<span>${escapeHtml(paymentInstructions)}</span>` : ""}
+        </div>
+        ${phone ? `<a class="primary-button link-button" href="https://wa.me/${phone}?text=${encodeURIComponent(depositMessage)}" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>` : ""}
+        <button class="primary-button" type="button" data-restart>Reservar otro turno</button>
+      </div>
+    `;
+    return;
+  }
+
   progress.innerHTML = "";
   root.innerHTML = `
     <div class="success-screen">
@@ -267,6 +316,17 @@ function renderSuccess() {
       <button class="primary-button" type="button" data-restart>Reservar otro turno</button>
     </div>
   `;
+}
+
+function normalizePhoneForWhatsapp(phone) {
+  let digits = String(phone || "").replace(/[\s\-()+]/g, "");
+  if (!/^\d+$/.test(digits)) return "";
+  if (!digits.startsWith("54")) {
+    if (digits.startsWith("0")) digits = digits.slice(1);
+    if (digits.startsWith("15")) digits = digits.slice(2);
+    digits = `54${digits}`;
+  }
+  return /^\d{8,15}$/.test(digits) ? digits : "";
 }
 
 function renderNotFound() {
@@ -396,10 +456,13 @@ async function init() {
     }
     const business = await businessResponse.json();
     businessName = business.name || "Turno Simple";
+    businessPhone = business.phone || business.whatsapp || "";
+    businessAddress = business.address || "";
+    businessPaymentAlias = business.paymentAlias || business.payment_alias || "";
     businessNameElement.textContent = businessName;
     assistantTitleElement.textContent = `Hola, soy el asistente de turnos de ${businessName}.`;
     assistantMessageElement.textContent = "Te ayudo a reservar en pocos pasos.";
-    const meta = [business.category, business.city].filter(Boolean).join(" - ");
+    const meta = [business.category, business.city, businessAddress].filter(Boolean).join(" - ");
     businessMetaElement.textContent = meta;
     businessMetaElement.hidden = !meta;
     document.title = `${businessName} - Reservar turno`;
