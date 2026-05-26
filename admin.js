@@ -380,7 +380,7 @@ root.addEventListener("change", async (event) => {
 });
 
 root.addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-action]");
+  const button = event.target.closest("button[data-action]");
   if (!button) return;
   const action = button.dataset.action;
   const id = button.dataset.id;
@@ -394,6 +394,12 @@ root.addEventListener("click", async (event) => {
     await refresh();
     return;
   }
+
+  const destructiveActions = new Set(["delete-service", "delete-professional", "delete-schedule"]);
+  if (!destructiveActions.has(action)) {
+    return;
+  }
+
   if (!window.confirm("Confirmas eliminar este elemento?")) return;
   if (action === "delete-service") await adminFetch(`${BUSINESS_API_URL}/admin/services/${id}`, { method: "DELETE" });
   if (action === "delete-professional") await adminFetch(`${BUSINESS_API_URL}/admin/professionals/${id}`, { method: "DELETE" });
