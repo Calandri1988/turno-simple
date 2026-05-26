@@ -16,8 +16,8 @@ const ADMIN_SERVICES_URL = `${BUSINESS_API_URL}/admin/services`;
 const ADMIN_PROFESSIONALS_URL = `${BUSINESS_API_URL}/admin/professionals`;
 const ADMIN_SCHEDULES_URL = `${BUSINESS_API_URL}/admin/schedules`;
 const ADMIN_AGENDA_URL = `${BUSINESS_API_URL}/admin/agenda`;
-const ADMIN_LOGIN_URL = "/api/admin/login";
-const ADMIN_TOKEN_KEY = "turno-simple-admin-token";
+const ADMIN_LOGIN_URL = `${BUSINESS_API_URL}/admin/login`;
+const ADMIN_TOKEN_KEY = `turno-simple-admin-token-${businessSlug}`;
 const services = [];
 const reservations = [];
 const professionals = [];
@@ -297,13 +297,13 @@ function clearAdminSession() {
   setReservations([]);
 }
 
-async function adminLogin(password) {
+async function adminLogin(email, password) {
   const response = await fetch(ADMIN_LOGIN_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ email, password }),
   });
 
   if (!response.ok) {
@@ -735,10 +735,14 @@ function renderAdminPanel() {
     adminList.innerHTML = `
       <form class="admin-login" id="admin-login-form">
         <label class="field">
+          <span>Email admin</span>
+          <input id="admin-email" name="email" type="email" autocomplete="username" placeholder="admin@demo.com" />
+        </label>
+        <label class="field">
           <span>Contraseña admin</span>
           <input id="admin-password" name="password" type="password" autocomplete="current-password" placeholder="admin123" />
         </label>
-        <p class="form-error" id="admin-login-error" role="alert" hidden>Contraseña incorrecta.</p>
+        <p class="form-error" id="admin-login-error" role="alert" hidden>Email o contraseña incorrectos.</p>
         <button class="option-button confirm-button" type="submit">Ingresar</button>
       </form>
     `;
@@ -746,11 +750,13 @@ function renderAdminPanel() {
     const form = adminList.querySelector("#admin-login-form");
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const password = String(new FormData(form).get("password") || "").trim();
+      const data = new FormData(form);
+      const email = String(data.get("email") || "").trim();
+      const password = String(data.get("password") || "").trim();
       const error = form.querySelector("#admin-login-error");
 
       try {
-        await adminLogin(password);
+        await adminLogin(email, password);
         await Promise.all([loadReservations(), loadAdminResources(), loadAgenda()]);
         renderAdminPanel();
       } catch (loginError) {

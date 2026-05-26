@@ -5,6 +5,7 @@ const fs = require("node:fs/promises");
 const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
+const bcrypt = require("bcryptjs");
 const sqlite3 = require("sqlite3");
 const { open } = require("sqlite");
 
@@ -69,13 +70,13 @@ async function adminRequest(pathname, options = {}) {
   });
 }
 
-async function loginAdmin(password = "admin123") {
-  return request("/api/admin/login", {
+async function loginAdmin(email = "admin@demo.com", password = "admin123", slug = "demo") {
+  return request(`/api/businesses/${slug}/admin/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ email, password }),
   });
 }
 
@@ -131,6 +132,17 @@ async function createOtherBusiness() {
     const professional = await db.get(
       "SELECT * FROM professionals WHERE business_id = ? AND name = ?",
       [business.id, "Profesional Otro"],
+    );
+    const passwordHash = await bcrypt.hash("otro123", 10);
+    await db.run(
+      `
+        INSERT INTO business_users (business_id, email, password_hash, role)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(business_id, email) DO UPDATE SET
+          password_hash = excluded.password_hash,
+          role = excluded.role
+      `,
+      [business.id, "admin@otro.com", passwordHash, "owner"],
     );
 
     for (const weekday of [0, 1]) {
@@ -277,7 +289,7 @@ test("GET /demo carga correctamente el negocio demo", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
   assert.ok(text.includes('id="business-name"'));
-  assert.ok(text.includes("app.js"));
+  assert.ok(text.includes("public.js"));
 });
 
 test("GET /slug-inexistente carga la app para mostrar manejo correcto", async () => {
@@ -287,7 +299,16 @@ test("GET /slug-inexistente carga la app para mostrar manejo correcto", async ()
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
   assert.ok(text.includes('id="business-name"'));
-  assert.ok(text.includes("app.js"));
+  assert.ok(text.includes("public.js"));
+});
+
+test("GET /demo/admin carga panel admin", async () => {
+  const response = await fetch(`${baseUrl}/demo/admin`);
+  const text = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /text\/html/);
+  assert.ok(text.includes("admin.js"));
 });
 
 test("GET /api/businesses/demo/services devuelve solo servicios del negocio demo", async () => {
@@ -309,15 +330,23 @@ test("GET /api/businesses/demo/reservations sin token devuelve 401", async () =>
 });
 
 test("login con contraseña incorrecta devuelve 401", async () => {
-  const response = await loginAdmin("incorrecta");
+  const response = await loginAdmin("admin@demo.com", "incorrecta");
+  assert.equal(response.status, 401);
+});
+
+test("login con usuario inexistente devuelve 401", async () => {
+  const response = await loginAdmin("no-existe@demo.com", "admin123");
   assert.equal(response.status, 401);
 });
 
 test("login correcto devuelve token", async () => {
-  const response = await loginAdmin("admin123");
+  const response = await loginAdmin("admin@demo.com", "admin123");
   assert.equal(response.status, 200);
   assert.equal(typeof response.body.token, "string");
   assert.ok(response.body.token.length > 20);
+  assert.equal(response.body.user.email, "admin@demo.com");
+  assert.equal(response.body.user.role, "owner");
+  assert.equal(response.body.business.slug, "demo");
 });
 
 test("GET /api/businesses/demo/reservations con token valido devuelve 200", async () => {
@@ -327,6 +356,28 @@ test("GET /api/businesses/demo/reservations con token valido devuelve 200", asyn
 
   assert.equal(response.status, 200);
   assert.ok(Array.isArray(response.body));
+});
+
+test("token valido pero slug de otro negocio devuelve 403", async () => {
+  await createOtherBusiness();
+  const response = await request("/api/businesses/otro/reservations", {
+    headers: adminHeaders(),
+  });
+
+  assert.equal(response.status, 403);
+});
+
+test("usuario de otro negocio no accede a demo", async () => {
+  await createOtherBusiness();
+  const login = await loginAdmin("admin@otro.com", "otro123", "otro");
+  const response = await request(`${DEMO_API}/reservations`, {
+    headers: {
+      Authorization: `Bearer ${login.body.token}`,
+    },
+  });
+
+  assert.equal(login.status, 200);
+  assert.equal(response.status, 403);
 });
 
 test("DELETE /api/businesses/demo/reservations/:id sin token devuelve 401", async () => {
@@ -530,7 +581,7 @@ test("CRUD servicios admin funciona y no cruza negocios", async () => {
   assert.equal(updated.status, 200);
   assert.equal(updated.body.durationMinutes, 45);
   assert.ok(demoServices.body.some((service) => service.id === "masaje"));
-  assert.ok(!otherServices.body.some((service) => service.id === "masaje"));
+  assert.equal(otherServices.status, 403);
   assert.equal(deleted.status, 204);
 });
 
@@ -564,7 +615,7 @@ test("CRUD profesionales admin funciona y no cruza negocios", async () => {
   assert.equal(updated.status, 200);
   assert.equal(updated.body.name, "Dora Editada");
   assert.ok(demoProfessionals.body.some((professional) => professional.name === "Dora Editada"));
-  assert.ok(!otherProfessionals.body.some((professional) => professional.name === "Dora Editada"));
+  assert.equal(otherProfessionals.status, 403);
   assert.equal(deleted.status, 204);
 });
 

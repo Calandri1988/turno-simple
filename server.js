@@ -1,5 +1,6 @@
 const express = require("express");
-const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const path = require("path");
 const sqlite3 = require("sqlite3");
 const { open } = require("sqlite");
@@ -7,9 +8,9 @@ const { open } = require("sqlite");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "turnos.sqlite");
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
-const adminTokens = new Set();
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const reservationStatuses = new Set(["reservado", "confirmado", "cancelado", "asistio", "no_asistio"]);
+const adminRoles = new Set(["owner", "staff"]);
 
 const servicesSeed = [
   { id: "consulta", name: "Consulta", durationMinutes: 30, price: null },
@@ -71,8 +72,10 @@ async function initDb() {
   await ensureProfessionalsTable(demoBusiness.id);
   await ensureReservationsTable(demoBusiness.id);
   await ensureProfessionalSchedulesTable(demoBusiness.id);
+  await ensureBusinessUsersTable();
   await seedServices(demoBusiness.id);
   await seedProfessionals(demoBusiness.id);
+  await seedDemoBusinessUser(demoBusiness.id);
   await db.exec("PRAGMA foreign_keys = ON");
 }
 
@@ -103,6 +106,42 @@ async function ensureDemoBusiness() {
   );
 
   return db.get("SELECT * FROM businesses WHERE slug = ?", "demo");
+}
+
+async function ensureBusinessUsersTable() {
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS business_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      business_id INTEGER NOT NULL,
+      email TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (business_id, email),
+      FOREIGN KEY (business_id) REFERENCES businesses(id)
+    )
+  `);
+}
+
+async function seedDemoBusinessUser(businessId) {
+  const email = "admin@demo.com";
+  const existing = await db.get(
+    "SELECT id FROM business_users WHERE business_id = ? AND lower(email) = lower(?)",
+    [businessId, email],
+  );
+
+  if (existing) {
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash("admin123", 10);
+  await db.run(
+    `
+      INSERT INTO business_users (business_id, email, password_hash, role)
+      VALUES (?, ?, ?, ?)
+    `,
+    [businessId, email, passwordHash, "owner"],
+  );
 }
 
 async function createServicesTable(tableName) {
@@ -537,27 +576,72 @@ function cleanText(value) {
   return String(value || "").trim();
 }
 
-function createAdminToken() {
-  const token = crypto.randomBytes(32).toString("hex");
-  adminTokens.add(token);
-  return token;
+function normalizeEmail(value) {
+  return cleanText(value).toLowerCase();
 }
 
-function requireAdmin(req, res, next) {
+function mapAdminUser(row) {
+  return {
+    id: row.id,
+    business_id: row.business_id,
+    email: row.email,
+    role: row.role,
+  };
+}
+
+function createAdminToken(user) {
+  return jwt.sign(
+    {
+      user_id: user.id,
+      business_id: user.business_id,
+      role: user.role,
+      email: user.email,
+    },
+    JWT_SECRET,
+    { expiresIn: "8h" },
+  );
+}
+
+async function requireAdmin(req, res, next) {
   const [type, token] = String(req.headers.authorization || "").split(" ");
 
-  if (type !== "Bearer" || !token || !adminTokens.has(token)) {
+  if (type !== "Bearer" || !token) {
     res.status(401).json({ error: "No autorizado." });
     return;
   }
 
-  next();
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = await db.get(
+      `
+        SELECT id, business_id, email, role
+        FROM business_users
+        WHERE id = ? AND business_id = ?
+      `,
+      [payload.user_id, payload.business_id],
+    );
+
+    if (!user || !adminRoles.has(user.role)) {
+      res.status(401).json({ error: "No autorizado." });
+      return;
+    }
+
+    req.adminUser = mapAdminUser(user);
+    next();
+  } catch (error) {
+    res.status(401).json({ error: "No autorizado." });
+  }
 }
 
 async function getBusinessOr404(req, res) {
   const business = await getBusinessBySlug(req.params.slug);
   if (!business) {
     res.status(404).json({ error: "Negocio no encontrado." });
+    return null;
+  }
+
+  if (req.adminUser && business.id !== req.adminUser.business_id) {
+    res.status(403).json({ error: "No autorizado para este negocio." });
     return null;
   }
 
@@ -880,17 +964,6 @@ async function findAvailableProfessional(businessId, date, time, durationMinutes
 app.use(express.json());
 app.use(express.static(__dirname));
 
-app.post("/api/admin/login", (req, res) => {
-  const password = cleanText(req.body.password);
-
-  if (password !== ADMIN_PASSWORD) {
-    res.status(401).json({ error: "Contraseña incorrecta." });
-    return;
-  }
-
-  res.json({ token: createAdminToken() });
-});
-
 app.get("/api/businesses/:slug", async (req, res) => {
   const business = await getBusinessBySlug(req.params.slug);
   if (!business) {
@@ -899,6 +972,46 @@ app.get("/api/businesses/:slug", async (req, res) => {
   }
 
   res.json(mapPublicBusiness(business));
+});
+
+app.post("/api/businesses/:slug/admin/login", async (req, res) => {
+  const business = await getBusinessBySlug(req.params.slug);
+  if (!business) {
+    res.status(404).json({ error: "Negocio no encontrado." });
+    return;
+  }
+
+  const email = normalizeEmail(req.body.email);
+  const password = cleanText(req.body.password);
+  if (!email || !password) {
+    res.status(401).json({ error: "Credenciales invalidas." });
+    return;
+  }
+
+  const user = await db.get(
+    `
+      SELECT id, business_id, email, password_hash, role
+      FROM business_users
+      WHERE business_id = ? AND lower(email) = lower(?)
+    `,
+    [business.id, email],
+  );
+
+  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    res.status(401).json({ error: "Credenciales invalidas." });
+    return;
+  }
+
+  const publicUser = mapAdminUser(user);
+  res.json({
+    token: createAdminToken(publicUser),
+    user: publicUser,
+    business: {
+      id: business.id,
+      slug: business.slug,
+      name: business.name,
+    },
+  });
 });
 
 app.get("/api/businesses/:slug/services", async (req, res) => {
@@ -1428,11 +1541,8 @@ app.patch("/api/businesses/:slug/admin/reservations/:id/status", requireAdmin, a
 });
 
 app.get("/api/businesses/:slug/reservations", requireAdmin, async (req, res) => {
-  const business = await getBusinessBySlug(req.params.slug);
-  if (!business) {
-    res.status(404).json({ error: "Negocio no encontrado." });
-    return;
-  }
+  const business = await getBusinessOr404(req, res);
+  if (!business) return;
 
   const rows = await db.all(`
     SELECT *
@@ -1584,11 +1694,8 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
 });
 
 app.delete("/api/businesses/:slug/reservations/:id", requireAdmin, async (req, res) => {
-  const business = await getBusinessBySlug(req.params.slug);
-  if (!business) {
-    res.status(404).json({ error: "Negocio no encontrado." });
-    return;
-  }
+  const business = await getBusinessOr404(req, res);
+  if (!business) return;
 
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
@@ -1609,22 +1716,23 @@ app.delete("/api/businesses/:slug/reservations/:id", requireAdmin, async (req, r
 });
 
 app.delete("/api/businesses/:slug/reservations", requireAdmin, async (req, res) => {
-  const business = await getBusinessBySlug(req.params.slug);
-  if (!business) {
-    res.status(404).json({ error: "Negocio no encontrado." });
-    return;
-  }
+  const business = await getBusinessOr404(req, res);
+  if (!business) return;
 
   await db.run("DELETE FROM reservations WHERE business_id = ?", business.id);
   res.status(204).end();
 });
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.redirect("/demo");
+});
+
+app.get("/:slug/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "admin.html"));
 });
 
 app.get("/:slug", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.sendFile(path.join(__dirname, "public.html"));
 });
 
 initDb()

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin - Turno Simple</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="admin-page">
+    <main class="admin-shell">
+      <header class="admin-topbar">
+        <div>
+          <p class="eyebrow">Panel admin</p>
+          <h1 id="business-name">Turno Simple</h1>
+          <p id="business-meta" class="business-meta"></p>
+        </div>
+        <button id="logout-button" class="secondary-button" type="button" hidden>Salir</button>
+      </header>
+
+      <section id="admin-root" class="admin-workspace" aria-live="polite"></section>
+    </main>
+
+    <script src="/admin.js"></script>
+  </body>
+</html>
