@@ -14,6 +14,7 @@ const services = [];
 const professionals = [];
 const schedules = [];
 const agenda = [];
+const allReservations = [];
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let businessName = "Turno Simple";
 let businessDetails = {
@@ -185,11 +186,14 @@ async function loadAdminData() {
   professionals.splice(0, professionals.length, ...(await professionalsResponse.json()).map(normalizeProfessional));
   schedules.splice(0, schedules.length, ...(await schedulesResponse.json()).map(normalizeSchedule));
   const reservations = (await reservationsResponse.json()).map(normalizeReservation);
+  allReservations.splice(0, allReservations.length, ...reservations);
   return reservations;
 }
 
 function openWhatsapp(id) {
-  const reservation = agenda.find((item) => item.id === Number(id));
+  const reservationId = Number(id);
+  const reservation = agenda.find((item) => item.id === reservationId)
+    || allReservations.find((item) => item.id === reservationId);
   const message = reservation
     ? `Hola ${reservation.customerName}. Tu turno en ${businessName} esta reservado para el ${formatDateLabel(reservation.date)} a las ${reservation.time}. Servicio: ${reservation.serviceName}. Profesional: ${reservation.professionalName}. Si necesitas modificarlo o cancelarlo, comunicate con nosotros.`
     : "";
