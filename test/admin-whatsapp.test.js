@@ -3,6 +3,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
+const {
+  buildProfessionalDaySummary,
+  groupAgendaByProfessional,
+  sortAgendaByTime,
+} = require("../agenda-utils");
 const { buildWhatsappLink, normalizeArgentinaWhatsapp } = require("../whatsapp");
 
 function jsonResponse(data) {
@@ -21,8 +26,12 @@ test("admin genera link WhatsApp para cliente nacional aunque no este en agenda 
 
   const context = {
     console,
+    URLSearchParams,
+    buildProfessionalDaySummary,
     buildWhatsappLink,
+    groupAgendaByProfessional,
     normalizeArgentinaWhatsapp,
+    sortAgendaByTime,
     document: {
       querySelector(selector) {
         return selector === "#admin-root" ? root : element;

@@ -1403,6 +1403,7 @@ body {
 .admin-inline-form textarea,
 .admin-inline-form select,
 .admin-filter input,
+.admin-filter select,
 .agenda-row select {
   min-height: 48px;
   border-color: var(--line);
@@ -1418,6 +1419,7 @@ body {
 .admin-inline-form textarea:focus,
 .admin-inline-form select:focus,
 .admin-filter input:focus,
+.admin-filter select:focus,
 .agenda-row select:focus {
   border-color: var(--brand);
   box-shadow: 0 0 0 3px rgba(32, 115, 109, 0.14);
@@ -1579,6 +1581,38 @@ body {
   align-items: center;
 }
 
+.copy-tools {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid rgba(32, 115, 109, 0.18);
+  border-radius: var(--radius);
+  background: var(--brand-soft);
+}
+
+.copy-tools strong,
+.copy-tools span,
+.copy-tools small {
+  display: block;
+}
+
+.copy-tools span,
+.copy-tools small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.copy-tools small {
+  color: var(--success);
+}
+
+.copy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .agenda-list {
   gap: 12px;
 }
@@ -1650,6 +1684,13 @@ body {
   background: #fbf7f0;
 }
 
+.whatsapp-preview {
+  align-self: center;
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 @media (min-width: 780px) {
   .choice-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1669,8 +1710,16 @@ body {
   }
 
   .agenda-row select,
-  .agenda-row button {
+  .agenda-row button,
+  .admin-filter input,
+  .admin-filter select,
+  .admin-filter button,
+  .copy-actions button {
     width: 100%;
+  }
+
+  .copy-actions {
+    display: grid;
   }
 }
 

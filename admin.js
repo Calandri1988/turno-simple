@@ -23,6 +23,7 @@ let businessDetails = {
   paymentAlias: "",
 };
 let filterDate = toIsoDate(new Date());
+let filterProfessionalId = "";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -172,7 +173,10 @@ async function login(email, password) {
 }
 
 async function loadAdminData() {
-  const query = filterDate ? `?date=${encodeURIComponent(filterDate)}` : "";
+  const params = new URLSearchParams();
+  if (filterDate) params.set("date", filterDate);
+  if (filterProfessionalId) params.set("professional_id", filterProfessionalId);
+  const query = params.toString() ? `?${params.toString()}` : "";
   const [agendaResponse, reservationsResponse, servicesResponse, professionalsResponse, schedulesResponse] = await Promise.all([
     adminFetch(`${BUSINESS_API_URL}/admin/agenda${query}`),
     adminFetch(`${BUSINESS_API_URL}/reservations`),
@@ -188,6 +192,41 @@ async function loadAdminData() {
   const reservations = (await reservationsResponse.json()).map(normalizeReservation);
   allReservations.splice(0, allReservations.length, ...reservations);
   return reservations;
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (error) {
+      // Sigue con el fallback para navegadores que bloquean clipboard en ciertos contextos.
+    }
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("No se pudo copiar.");
+}
+
+async function copyProfessionalDay(professionalId) {
+  const id = Number(professionalId);
+  const items = sortAgendaByTime(agenda.filter((item) => Number(item.professionalId) === id));
+  const professional = professionals.find((item) => item.id === id);
+  const professionalName = professional?.name || items[0]?.professionalName || "Profesional";
+  const text = buildProfessionalDaySummary(professionalName, formatDateLabel(filterDate), items);
+  await copyText(text);
+  const feedback = root.querySelector("[data-copy-feedback]");
+  if (feedback) {
+    feedback.textContent = "Turnos copiados";
+    feedback.hidden = false;
+  }
 }
 
 function openWhatsapp(id) {
@@ -250,6 +289,25 @@ function renderAgendaList(items, emptyText) {
       <button class="danger-button" type="button" data-action="cancel-status" data-id="${reservation.id}">Cancelar</button>
     </article>
   `).join("");
+}
+
+function renderCopyTools(items) {
+  const groups = groupAgendaByProfessional(items);
+  if (groups.length === 0) return "";
+  return `
+    <div class="copy-tools">
+      <div>
+        <strong>Copiar turnos del dia</strong>
+        <span>Texto listo para pegar en WhatsApp.</span>
+      </div>
+      <div class="copy-actions">
+        ${groups.map((group) => `
+          <button class="secondary-button" type="button" data-action="copy-day" data-id="${group.id}">Copiar ${escapeHtml(group.name)}</button>
+        `).join("")}
+      </div>
+      <small data-copy-feedback hidden></small>
+    </div>
+  `;
 }
 
 function optionList(items, selected = "") {
@@ -362,9 +420,15 @@ async function renderAdmin() {
         </div>
         <form id="filter-form" class="admin-filter">
           <input name="date" type="date" value="${escapeHtml(filterDate)}" />
+          <select name="professionalId">
+            <option value="">Todos los profesionales</option>
+            ${professionals.map((professional) => `<option value="${professional.id}" ${String(professional.id) === String(filterProfessionalId) ? "selected" : ""}>${escapeHtml(professional.name)}</option>`).join("")}
+          </select>
+          <button class="secondary-button" type="button" data-action="today-filter">Hoy</button>
           <button class="secondary-button" type="submit">Buscar</button>
         </form>
       </div>
+      ${renderCopyTools(agenda)}
       <div class="agenda-list">${renderAgendaList(agenda, "No hay turnos para esta fecha.")}</div>
     </section>
     <section class="admin-section">
@@ -399,6 +463,7 @@ root.addEventListener("submit", async (event) => {
     }
     if (form.id === "filter-form") {
       filterDate = data.date || "";
+      filterProfessionalId = data.professionalId || "";
       await refresh();
       return;
     }
@@ -451,6 +516,19 @@ root.addEventListener("click", async (event) => {
 
   if (action === "whatsapp") {
     openWhatsapp(id);
+    return;
+  }
+  if (action === "copy-day") {
+    try {
+      await copyProfessionalDay(id);
+    } catch (error) {
+      window.alert("No pudimos copiar los turnos.");
+    }
+    return;
+  }
+  if (action === "today-filter") {
+    filterDate = toIsoDate(new Date());
+    await refresh();
     return;
   }
   if (action === "cancel-status") {
