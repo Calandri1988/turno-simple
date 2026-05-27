@@ -24,6 +24,9 @@ let businessDetails = {
 };
 let filterDate = toIsoDate(new Date());
 let filterProfessionalId = "";
+let pollingId = null;
+let lastUpdatedAt = null;
+let knownReservationIds = new Set();
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -117,6 +120,10 @@ function clearSession() {
   token = "";
   localStorage.removeItem(TOKEN_KEY);
   logoutButton.hidden = true;
+  if (pollingId) {
+    clearInterval(pollingId);
+    pollingId = null;
+  }
 }
 
 async function adminFetch(url, options = {}) {
@@ -140,6 +147,15 @@ async function sendJson(url, method, body) {
   });
   if (!response.ok) throw new Error("No se pudo guardar.");
   return response.status === 204 ? null : response.json();
+}
+
+async function readErrorMessage(response) {
+  try {
+    const data = await response.json();
+    return data.error || "No pudimos completar la accion.";
+  } catch (error) {
+    return "No pudimos completar la accion.";
+  }
 }
 
 async function loadBusiness() {
@@ -173,25 +189,76 @@ async function login(email, password) {
 }
 
 async function loadAdminData() {
-  const params = new URLSearchParams();
-  if (filterDate) params.set("date", filterDate);
-  if (filterProfessionalId) params.set("professional_id", filterProfessionalId);
-  const query = params.toString() ? `?${params.toString()}` : "";
-  const [agendaResponse, reservationsResponse, servicesResponse, professionalsResponse, schedulesResponse] = await Promise.all([
-    adminFetch(`${BUSINESS_API_URL}/admin/agenda${query}`),
-    adminFetch(`${BUSINESS_API_URL}/reservations`),
+  const [reservations, servicesResponse, professionalsResponse, schedulesResponse] = await Promise.all([
+    loadReservationData(),
     adminFetch(`${BUSINESS_API_URL}/admin/services`),
     adminFetch(`${BUSINESS_API_URL}/admin/professionals`),
     adminFetch(`${BUSINESS_API_URL}/admin/schedules`),
   ]);
 
-  agenda.splice(0, agenda.length, ...(await agendaResponse.json()).map(normalizeReservation));
   services.splice(0, services.length, ...(await servicesResponse.json()).map(normalizeService));
   professionals.splice(0, professionals.length, ...(await professionalsResponse.json()).map(normalizeProfessional));
   schedules.splice(0, schedules.length, ...(await schedulesResponse.json()).map(normalizeSchedule));
+  return reservations;
+}
+
+function agendaQueryString() {
+  const params = new URLSearchParams();
+  if (filterDate) params.set("date", filterDate);
+  if (filterProfessionalId) params.set("professional_id", filterProfessionalId);
+  return params.toString() ? `?${params.toString()}` : "";
+}
+
+async function loadReservationData() {
+  const [agendaResponse, reservationsResponse] = await Promise.all([
+    adminFetch(`${BUSINESS_API_URL}/admin/agenda${agendaQueryString()}`),
+    adminFetch(`${BUSINESS_API_URL}/reservations`),
+  ]);
+  agenda.splice(0, agenda.length, ...(await agendaResponse.json()).map(normalizeReservation));
   const reservations = (await reservationsResponse.json()).map(normalizeReservation);
   allReservations.splice(0, allReservations.length, ...reservations);
+  lastUpdatedAt = new Date();
   return reservations;
+}
+
+function updateFreshnessText() {
+  const element = root.querySelector("[data-last-updated]");
+  if (!element || !lastUpdatedAt) return;
+  const seconds = Math.max(0, Math.round((Date.now() - lastUpdatedAt.getTime()) / 1000));
+  element.textContent = `Actualizado hace ${seconds} segundos`;
+}
+
+function renderAgendaSections() {
+  const todayList = root.querySelector("[data-agenda-list='today']");
+  const copyTools = root.querySelector("[data-copy-tools-slot]");
+  const upcomingList = root.querySelector("[data-agenda-list='upcoming']");
+  const upcoming = allReservations.filter((item) => item.date >= toIsoDate(new Date())).slice(0, 8);
+  if (copyTools) copyTools.innerHTML = renderCopyTools(agenda);
+  if (todayList) todayList.innerHTML = renderAgendaList(agenda, "No hay turnos para esta fecha.");
+  if (upcomingList) upcomingList.innerHTML = renderAgendaList(upcoming, "No hay proximos turnos.");
+  updateFreshnessText();
+}
+
+async function refreshReservationsOnly({ showNewNotice = false } = {}) {
+  const before = new Set(knownReservationIds);
+  await loadReservationData();
+  const after = new Set(allReservations.map((item) => item.id));
+  const hasNewReservations = [...after].some((id) => !before.has(id));
+  knownReservationIds = after;
+  renderAgendaSections();
+  const notice = root.querySelector("[data-admin-notice]");
+  if (notice && showNewNotice) {
+    notice.textContent = hasNewReservations ? "Hay nuevos turnos" : "Turnos actualizados";
+    notice.hidden = false;
+  }
+}
+
+function startPolling() {
+  if (pollingId) clearInterval(pollingId);
+  pollingId = setInterval(() => {
+    if (!token) return;
+    refreshReservationsOnly({ showNewNotice: true }).catch(() => {});
+  }, 30000);
 }
 
 async function copyText(text) {
@@ -409,6 +476,7 @@ function renderSchedules() {
 
 async function renderAdmin() {
   const reservations = await loadAdminData();
+  knownReservationIds = new Set(reservations.map((item) => item.id));
   logoutButton.hidden = false;
   const upcoming = reservations.filter((item) => item.date >= toIsoDate(new Date())).slice(0, 8);
   root.innerHTML = `
@@ -425,15 +493,20 @@ async function renderAdmin() {
             ${professionals.map((professional) => `<option value="${professional.id}" ${String(professional.id) === String(filterProfessionalId) ? "selected" : ""}>${escapeHtml(professional.name)}</option>`).join("")}
           </select>
           <button class="secondary-button" type="button" data-action="today-filter">Hoy</button>
+          <button class="secondary-button" type="button" data-action="refresh-agenda">Actualizar turnos</button>
           <button class="secondary-button" type="submit">Buscar</button>
         </form>
       </div>
-      ${renderCopyTools(agenda)}
-      <div class="agenda-list">${renderAgendaList(agenda, "No hay turnos para esta fecha.")}</div>
+      <div class="admin-update-line">
+        <span data-last-updated>${lastUpdatedAt ? `Actualizado hace 0 segundos` : ""}</span>
+        <strong data-admin-notice hidden></strong>
+      </div>
+      <div data-copy-tools-slot>${renderCopyTools(agenda)}</div>
+      <div class="agenda-list" data-agenda-list="today">${renderAgendaList(agenda, "No hay turnos para esta fecha.")}</div>
     </section>
     <section class="admin-section">
       <h2>Proximos turnos</h2>
-      <div class="agenda-list">${renderAgendaList(upcoming, "No hay proximos turnos.")}</div>
+      <div class="agenda-list" data-agenda-list="upcoming">${renderAgendaList(upcoming, "No hay proximos turnos.")}</div>
     </section>
     ${renderBusinessSettings()}
     ${renderServices()}
@@ -459,12 +532,13 @@ root.addEventListener("submit", async (event) => {
     if (form.id === "login-form") {
       await login(data.email, data.password);
       await refresh();
+      startPolling();
       return;
     }
     if (form.id === "filter-form") {
       filterDate = data.date || "";
       filterProfessionalId = data.professionalId || "";
-      await refresh();
+      await refreshReservationsOnly();
       return;
     }
     if (form.dataset.form === "business-update") {
@@ -493,7 +567,7 @@ root.addEventListener("change", async (event) => {
   const select = event.target.closest("[data-action='status']");
   if (!select) return;
   await sendJson(`${BUSINESS_API_URL}/admin/reservations/${select.dataset.id}/status`, "PATCH", { status: select.value });
-  await refresh();
+  await refreshReservationsOnly();
 });
 
 root.addEventListener("input", (event) => {
@@ -528,30 +602,63 @@ root.addEventListener("click", async (event) => {
   }
   if (action === "today-filter") {
     filterDate = toIsoDate(new Date());
-    await refresh();
+    const dateInput = root.querySelector("#filter-form input[name='date']");
+    if (dateInput) dateInput.value = filterDate;
+    await refreshReservationsOnly();
+    return;
+  }
+  if (action === "refresh-agenda") {
+    try {
+      await refreshReservationsOnly({ showNewNotice: true });
+    } catch (error) {
+      window.alert("No pudimos actualizar los turnos.");
+    }
     return;
   }
   if (action === "cancel-status") {
     await sendJson(`${BUSINESS_API_URL}/admin/reservations/${id}/status`, "PATCH", { status: "cancelado" });
-    await refresh();
+    await refreshReservationsOnly();
     return;
   }
   if (action === "confirm-deposit") {
     await sendJson(`${BUSINESS_API_URL}/admin/reservations/${id}/status`, "PATCH", { status: "confirmado" });
+    await refreshReservationsOnly();
+    return;
+  }
+
+  const deleteConfig = {
+    "delete-service": {
+      confirm: "¿Eliminar este servicio?",
+      url: `${BUSINESS_API_URL}/admin/services/${id}`,
+    },
+    "delete-professional": {
+      confirm: "¿Eliminar este profesional?",
+      url: `${BUSINESS_API_URL}/admin/professionals/${id}`,
+    },
+    "delete-schedule": {
+      confirm: "¿Eliminar este horario?",
+      url: `${BUSINESS_API_URL}/admin/schedules/${id}`,
+    },
+  };
+  const config = deleteConfig[action];
+  if (!config) return;
+
+  if (!window.confirm(config.confirm)) return;
+  try {
+    const response = await adminFetch(config.url, { method: "DELETE" });
+    if (!response.ok) {
+      const message = await readErrorMessage(response);
+      const hasAssociatedReservations = response.status === 409 && /reservas|turnos/i.test(message);
+      window.alert(hasAssociatedReservations
+        ? "No se puede eliminar porque tiene turnos asociados. Podés ocultarlo o desactivarlo."
+        : message);
+      return;
+    }
     await refresh();
-    return;
+    window.alert("Eliminado");
+  } catch (error) {
+    window.alert("No pudimos eliminar. Probá de nuevo.");
   }
-
-  const destructiveActions = new Set(["delete-service", "delete-professional", "delete-schedule"]);
-  if (!destructiveActions.has(action)) {
-    return;
-  }
-
-  if (!window.confirm("Confirmas eliminar este elemento?")) return;
-  if (action === "delete-service") await adminFetch(`${BUSINESS_API_URL}/admin/services/${id}`, { method: "DELETE" });
-  if (action === "delete-professional") await adminFetch(`${BUSINESS_API_URL}/admin/professionals/${id}`, { method: "DELETE" });
-  if (action === "delete-schedule") await adminFetch(`${BUSINESS_API_URL}/admin/schedules/${id}`, { method: "DELETE" });
-  await refresh();
 });
 
 logoutButton.addEventListener("click", () => {
@@ -563,7 +670,10 @@ async function init() {
   const exists = await loadBusiness();
   if (!exists) return;
   if (!token) renderLogin();
-  else await refresh();
+  else {
+    await refresh();
+    startPolling();
+  }
 }
 
 init();
