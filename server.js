@@ -117,7 +117,7 @@ async function ensureDemoBusiness() {
         category = excluded.category,
         city = excluded.city
     `,
-    ["Turno Simple Demo", "demo", "General", "Cruz del Eje"],
+    ["Barbería Central", "demo", "Barbería", "Cruz del Eje"],
   );
 
   return db.get("SELECT * FROM businesses WHERE slug = ?", "demo");
@@ -1017,7 +1017,7 @@ async function findAvailableProfessional(businessId, date, time, durationMinutes
 }
 
 app.use(express.json());
-app.use(express.static(__dirname));
+app.use(express.static(__dirname, { index: false }));
 
 app.get("/api/businesses/:slug", async (req, res) => {
   const business = await getBusinessBySlug(req.params.slug);

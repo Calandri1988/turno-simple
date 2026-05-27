@@ -272,8 +272,8 @@ test("GET /api/businesses/demo devuelve 200", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(response.body.slug, "demo");
-  assert.equal(response.body.name, "Turno Simple Demo");
-  assert.equal(response.body.category, "General");
+  assert.equal(response.body.name, "Barbería Central");
+  assert.equal(response.body.category, "Barbería");
   assert.equal(response.body.city, "Cruz del Eje");
   assert.equal(response.body.whatsapp, "");
   assert.equal(response.body.address, "");
