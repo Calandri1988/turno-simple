@@ -188,26 +188,17 @@ async function loadAdminData() {
   return reservations;
 }
 
-function normalizePhoneForWhatsapp(phone) {
-  let digits = String(phone || "").replace(/[\s\-()+]/g, "");
-  if (!/^\d+$/.test(digits)) return "";
-  if (!digits.startsWith("54")) {
-    if (digits.startsWith("0")) digits = digits.slice(1);
-    if (digits.startsWith("15")) digits = digits.slice(2);
-    digits = `54${digits}`;
-  }
-  return /^\d{8,15}$/.test(digits) ? digits : "";
-}
-
 function openWhatsapp(id) {
   const reservation = agenda.find((item) => item.id === Number(id));
-  const phone = normalizePhoneForWhatsapp(reservation?.customerPhone);
-  if (!reservation || !phone) {
+  const message = reservation
+    ? `Hola ${reservation.customerName}. Tu turno en ${businessName} esta reservado para el ${formatDateLabel(reservation.date)} a las ${reservation.time}. Servicio: ${reservation.serviceName}. Profesional: ${reservation.professionalName}. Si necesitas modificarlo o cancelarlo, comunicate con nosotros.`
+    : "";
+  const link = buildWhatsappLink(reservation?.customerPhone, message, "3549");
+  if (!reservation || !link) {
     window.alert("Ese turno no tiene un telefono valido.");
     return;
   }
-  const message = `Hola ${reservation.customerName}. Tu turno en ${businessName} esta reservado para el ${formatDateLabel(reservation.date)} a las ${reservation.time}. Servicio: ${reservation.serviceName}. Profesional: ${reservation.professionalName}. Si necesitas modificarlo o cancelarlo, comunicate con nosotros.`;
-  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank");
+  window.open(link, "_blank");
 }
 
 function renderLogin() {
@@ -293,6 +284,7 @@ function renderServices() {
 }
 
 function renderBusinessSettings() {
+  const normalizedWhatsapp = normalizeArgentinaWhatsapp(businessDetails.whatsapp, "3549");
   return `
     <section class="admin-section">
       <h2>Datos del negocio</h2>
@@ -300,6 +292,7 @@ function renderBusinessSettings() {
         <input name="whatsapp" placeholder="WhatsApp del negocio" value="${escapeHtml(businessDetails.whatsapp)}" />
         <input name="address" placeholder="Direccion" value="${escapeHtml(businessDetails.address)}" />
         <input name="paymentAlias" placeholder="Alias de pago" value="${escapeHtml(businessDetails.paymentAlias)}" />
+        <small class="whatsapp-preview" data-whatsapp-preview>${normalizedWhatsapp ? `Se enviará como: ${escapeHtml(normalizedWhatsapp)}` : "No pudimos reconocer el WhatsApp. Escribilo con característica, por ejemplo: 3549504056."}</small>
         <button class="primary-button" type="submit">Guardar datos</button>
       </form>
     </section>
@@ -432,6 +425,18 @@ root.addEventListener("change", async (event) => {
   if (!select) return;
   await sendJson(`${BUSINESS_API_URL}/admin/reservations/${select.dataset.id}/status`, "PATCH", { status: select.value });
   await refresh();
+});
+
+root.addEventListener("input", (event) => {
+  const whatsappInput = event.target.closest("input[name='whatsapp']");
+  if (!whatsappInput) return;
+  const form = whatsappInput.closest("form");
+  const preview = form?.querySelector("[data-whatsapp-preview]");
+  if (!preview) return;
+  const normalized = normalizeArgentinaWhatsapp(whatsappInput.value, "3549");
+  preview.textContent = normalized
+    ? `Se enviará como: ${normalized}`
+    : "No pudimos reconocer el WhatsApp. Escribilo con característica, por ejemplo: 3549504056.";
 });
 
 root.addEventListener("click", async (event) => {

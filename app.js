@@ -1133,25 +1133,6 @@ async function updateReservationStatus(id, status) {
   }
 }
 
-function normalizePhoneForWhatsapp(phone) {
-  let digits = String(phone || "").replace(/[\s\-()+]/g, "");
-  if (!/^\d+$/.test(digits)) {
-    return "";
-  }
-
-  if (!digits.startsWith("54")) {
-    if (digits.startsWith("0")) {
-      digits = digits.slice(1);
-    }
-    if (digits.startsWith("15")) {
-      digits = digits.slice(2);
-    }
-    digits = `54${digits}`;
-  }
-
-  return /^\d{8,15}$/.test(digits) ? digits : "";
-}
-
 function openReservationWhatsapp(id) {
   const reservation = agendaReservations.find((item) => item.id === Number(id));
   if (!reservation) {
@@ -1159,14 +1140,14 @@ function openReservationWhatsapp(id) {
     return;
   }
 
-  const phone = normalizePhoneForWhatsapp(reservation.customerPhone);
-  if (!phone) {
+  const message = `Hola ${reservation.customerName}. Tu turno en ${businessName} esta reservado para el ${formatDateLabel(reservation.date)} a las ${reservation.time}. Servicio: ${reservation.serviceName}. Profesional: ${reservation.professionalName}. Si necesitas modificarlo o cancelarlo, comunicate con nosotros.`;
+  const link = buildWhatsappLink(reservation.customerPhone, message, "3549");
+  if (!link) {
     addMessage("Ese turno no tiene un telefono valido para WhatsApp.");
     return;
   }
 
-  const message = `Hola ${reservation.customerName}. Tu turno en ${businessName} esta reservado para el ${formatDateLabel(reservation.date)} a las ${reservation.time}. Servicio: ${reservation.serviceName}. Profesional: ${reservation.professionalName}. Si necesitas modificarlo o cancelarlo, comunicate con nosotros.`;
-  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank");
+  window.open(link, "_blank");
 }
 
 async function exportAgendaCsv() {

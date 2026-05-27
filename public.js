@@ -283,9 +283,9 @@ function renderCustomer() {
 }
 
 function renderSuccess() {
-  const phone = normalizePhoneForWhatsapp(businessPhone);
   const paymentInstructions = servicePaymentInstructions(state.service);
   const depositMessage = `Hola, hice una reserva en ${businessName} para el dia ${state.date.label} a las ${state.time}. Te envio el comprobante de la seña.`;
+  const whatsappLink = buildWhatsappLink(businessPhone, depositMessage, "3549");
   if (state.service.requiresDeposit) {
     progress.innerHTML = "";
     root.innerHTML = `
@@ -299,7 +299,7 @@ function renderSuccess() {
           <span>Seña: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
           ${paymentInstructions ? `<span>${escapeHtml(paymentInstructions)}</span>` : ""}
         </div>
-        ${phone ? `<a class="primary-button link-button" href="https://wa.me/${phone}?text=${encodeURIComponent(depositMessage)}" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>` : ""}
+        ${whatsappLink ? `<a class="primary-button link-button" href="${whatsappLink}" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>` : ""}
         <button class="primary-button" type="button" data-restart>Reservar otro turno</button>
       </div>
     `;
@@ -320,17 +320,6 @@ function renderSuccess() {
       <button class="primary-button" type="button" data-restart>Reservar otro turno</button>
     </div>
   `;
-}
-
-function normalizePhoneForWhatsapp(phone) {
-  let digits = String(phone || "").replace(/[\s\-()+]/g, "");
-  if (!/^\d+$/.test(digits)) return "";
-  if (!digits.startsWith("54")) {
-    if (digits.startsWith("0")) digits = digits.slice(1);
-    if (digits.startsWith("15")) digits = digits.slice(2);
-    digits = `54${digits}`;
-  }
-  return /^\d{8,15}$/.test(digits) ? digits : "";
 }
 
 function renderNotFound() {
