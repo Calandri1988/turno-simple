@@ -1,0 +1,5 @@
+{
+  "type": "booking_confirmed",
+  "channel": "whatsapp",
+  "message": "Hola {{client_name}}, tu turno para {{service}} fue confirmado para el {{date}} a las {{time}}. Te esperamos en {{business_name}}."
+}

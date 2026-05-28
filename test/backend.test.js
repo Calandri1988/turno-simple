@@ -240,7 +240,10 @@ before(async () => {
 beforeEach(async () => {
   const login = await loginAdmin();
   adminToken = login.body.token;
-  await withDb((db) => db.run("DELETE FROM reservations"));
+  await withDb(async (db) => {
+    await db.run("DELETE FROM reservations");
+    await db.run("DELETE FROM notifications");
+  });
 });
 
 after(async () => {
@@ -473,6 +476,96 @@ test("POST /api/businesses/demo/reservations crea reserva valida y devuelve 201"
   assert.equal(response.status, 201);
   assert.equal(response.body.businessId > 0, true);
   assert.equal(response.body.serviceId, "consulta");
+});
+
+test("crear reserva encola confirmacion y recordatorio", async () => {
+  const response = await createReservation({
+    customerName: "Juan Perez",
+    customerPhone: "3549504056",
+  });
+
+  assert.equal(response.status, 201);
+
+  const notifications = await withDb((db) => db.all(
+    `
+      SELECT *
+      FROM notifications
+      WHERE booking_id = ?
+      ORDER BY type ASC
+    `,
+    response.body.id,
+  ));
+
+  assert.equal(notifications.length, 2);
+  assert.deepEqual(notifications.map((item) => item.type).sort(), ["booking_confirmed", "booking_reminder_24h"]);
+  assert.ok(notifications.every((item) => item.business_id === response.body.businessId));
+  assert.ok(notifications.every((item) => item.channel === "whatsapp"));
+  assert.ok(notifications.every((item) => item.recipient === "5493549504056"));
+  assert.ok(notifications.find((item) => item.type === "booking_confirmed").message.includes("Hola Juan Perez"));
+  assert.equal(notifications.find((item) => item.type === "booking_reminder_24h").status, "pending");
+});
+
+test("no encola recordatorio si el turno empieza en menos de 24 horas", async () => {
+  const soon = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const date = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, "0")}-${String(soon.getDate()).padStart(2, "0")}`;
+  const time = `${String(soon.getHours()).padStart(2, "0")}:${String(soon.getMinutes()).padStart(2, "0")}`;
+  await withDb(async (db) => {
+    await db.run("DELETE FROM professional_schedules WHERE business_id = 1 AND professional_id = 1 AND weekday = ?", soon.getDay());
+    await db.run(
+      `
+        INSERT INTO professional_schedules (business_id, professional_id, weekday, start_time, end_time, interval_minutes)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      [1, 1, soon.getDay(), "00:00", "23:59", 1],
+    );
+  });
+
+  const response = await createReservation({
+    date,
+    time,
+    customerPhone: "3549504056",
+  });
+
+  assert.equal(response.status, 201);
+
+  const notifications = await withDb((db) => db.all(
+    "SELECT type, recipient FROM notifications WHERE booking_id = ? ORDER BY type",
+    response.body.id,
+  ));
+
+  assert.deepEqual(notifications.map((item) => item.type), ["booking_confirmed"]);
+  assert.equal(notifications[0].recipient, "5493549504056");
+});
+
+test("cancelar reserva cancela recordatorio pendiente y encola cancelacion", async () => {
+  const created = await createReservation({
+    customerName: "Juan Cancelado",
+    customerPhone: "3549504056",
+  });
+  assert.equal(created.status, 201);
+
+  const deleted = await adminRequest(`${DEMO_API}/reservations/${created.body.id}`, {
+    method: "DELETE",
+  });
+  assert.equal(deleted.status, 204);
+
+  const notifications = await withDb((db) => db.all(
+    `
+      SELECT type, status, message
+      FROM notifications
+      WHERE booking_id = ?
+      ORDER BY type ASC
+    `,
+    created.body.id,
+  ));
+
+  const reminder = notifications.find((item) => item.type === "booking_reminder_24h");
+  const cancellation = notifications.find((item) => item.type === "booking_cancelled");
+
+  assert.equal(reminder.status, "cancelled");
+  assert.equal(cancellation.status, "pending");
+  assert.ok(cancellation.message.includes("Juan Cancelado"));
+  assert.ok(cancellation.message.includes("/demo"));
 });
 
 test("un profesional de otro negocio no puede recibir reserva en demo", async () => {

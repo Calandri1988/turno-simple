@@ -4,11 +4,24 @@ const jwt = require("jsonwebtoken");
 const path = require("path");
 const sqlite3 = require("sqlite3");
 const { open } = require("sqlite");
+const {
+  cancelPendingReminder,
+  configureNotifications,
+  enqueueNotification,
+  renderTemplate,
+  startWorker,
+} = require("./modules/notifications");
+const {
+  buildBookingDateTime,
+  formatDate,
+  subtractHours,
+} = require("./modules/notifications/date-utils");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "turnos.sqlite");
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || process.env.APP_URL || `http://localhost:${PORT}`;
 const reservationStatuses = new Set(["pendiente", "reservado", "confirmado", "cancelado", "asistio", "no_asistio"]);
 const adminRoles = new Set(["owner", "staff"]);
 
@@ -73,10 +86,12 @@ async function initDb() {
   await ensureReservationsTable(demoBusiness.id);
   await ensureProfessionalSchedulesTable(demoBusiness.id);
   await ensureBusinessUsersTable();
+  await ensureNotificationsTable();
   await seedServices(demoBusiness.id);
   await seedProfessionals(demoBusiness.id);
   await seedDemoBusinessUser(demoBusiness.id);
   await db.exec("PRAGMA foreign_keys = ON");
+  configureNotifications(db);
 }
 
 async function ensureBusinessesTable() {
@@ -135,6 +150,37 @@ async function ensureBusinessUsersTable() {
       UNIQUE (business_id, email),
       FOREIGN KEY (business_id) REFERENCES businesses(id)
     )
+  `);
+}
+
+async function ensureNotificationsTable() {
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      business_id INTEGER NOT NULL,
+      booking_id INTEGER,
+      type TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'whatsapp',
+      recipient TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER DEFAULT 0,
+      last_error TEXT,
+      scheduled_for DATETIME NOT NULL,
+      sent_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_notifications_status_scheduled
+    ON notifications(status, scheduled_for)
+  `);
+
+  await db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_unique_booking_type
+    ON notifications(booking_id, type)
+    WHERE booking_id IS NOT NULL
   `);
 }
 
@@ -605,6 +651,72 @@ function mapSchedule(row) {
     endTime: row.end_time,
     intervalMinutes: row.interval_minutes,
   };
+}
+
+async function enqueueBookingCreatedNotifications(business, booking) {
+  const confirmed = renderTemplate("booking_confirmed", {
+    client_name: booking.customer_name,
+    service: booking.service_name,
+    date: formatDate(booking.date),
+    time: booking.time,
+    business_name: business.name,
+  });
+
+  await enqueueNotification({
+    businessId: business.id,
+    bookingId: booking.id,
+    type: "booking_confirmed",
+    channel: confirmed.channel,
+    recipient: booking.customer_phone,
+    message: confirmed.message,
+    scheduledFor: new Date(),
+  });
+
+  const bookingDateTime = buildBookingDateTime(booking.date, booking.time);
+  if (bookingDateTime.getTime() - Date.now() < 24 * 60 * 60 * 1000) {
+    console.log("[notifications] Skipped reminder: booking starts in less than 24h");
+    return;
+  }
+
+  const reminderDate = subtractHours(bookingDateTime, 24);
+  const reminder = renderTemplate("booking_reminder_24h", {
+    client_name: booking.customer_name,
+    service: booking.service_name,
+    time: booking.time,
+    business_name: business.name,
+  });
+
+  await enqueueNotification({
+    businessId: business.id,
+    bookingId: booking.id,
+    type: "booking_reminder_24h",
+    channel: reminder.channel,
+    recipient: booking.customer_phone,
+    message: reminder.message,
+    scheduledFor: reminderDate,
+  });
+}
+
+async function enqueueBookingCancelledNotification(business, booking) {
+  await cancelPendingReminder(booking.id);
+
+  const cancelled = renderTemplate("booking_cancelled", {
+    client_name: booking.customer_name,
+    service: booking.service_name,
+    date: formatDate(booking.date),
+    time: booking.time,
+    booking_url: `${PUBLIC_BASE_URL.replace(/\/$/, "")}/${business.slug}`,
+  });
+
+  await enqueueNotification({
+    businessId: business.id,
+    bookingId: booking.id,
+    type: "booking_cancelled",
+    channel: cancelled.channel,
+    recipient: booking.customer_phone,
+    message: cancelled.message,
+    scheduledFor: new Date(),
+  });
 }
 
 async function getBusinessBySlug(slug) {
@@ -1635,6 +1747,9 @@ app.patch("/api/businesses/:slug/admin/reservations/:id/status", requireAdmin, a
     "SELECT * FROM reservations WHERE business_id = ? AND id = ?",
     [business.id, id],
   );
+  if (status === "cancelado") {
+    await enqueueBookingCancelledNotification(business, row);
+  }
   res.json(mapReservation(row));
 });
 
@@ -1777,6 +1892,7 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
     const row = await db.get("SELECT * FROM reservations WHERE id = ?", result.lastID);
     await db.exec("COMMIT");
     transactionStarted = false;
+    await enqueueBookingCreatedNotifications(business, row);
     res.status(201).json(mapReservation(row));
   } catch (error) {
     if (transactionStarted) {
@@ -1802,6 +1918,15 @@ app.delete("/api/businesses/:slug/reservations/:id", requireAdmin, async (req, r
     return;
   }
 
+  const booking = await db.get(
+    "SELECT * FROM reservations WHERE business_id = ? AND id = ?",
+    [business.id, id],
+  );
+  if (!booking) {
+    res.status(404).json({ error: "Reserva no encontrada." });
+    return;
+  }
+
   const result = await db.run(
     "DELETE FROM reservations WHERE business_id = ? AND id = ?",
     [business.id, id],
@@ -1811,6 +1936,7 @@ app.delete("/api/businesses/:slug/reservations/:id", requireAdmin, async (req, r
     return;
   }
 
+  await enqueueBookingCancelledNotification(business, booking);
   res.status(204).end();
 });
 
@@ -1836,6 +1962,7 @@ app.get("/:slug", (req, res) => {
 
 initDb()
   .then(() => {
+    startWorker();
     app.listen(PORT, () => {
       console.log(`Turno Simple listo en http://localhost:${PORT}`);
     });

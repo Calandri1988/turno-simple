@@ -1,0 +1,5 @@
+{
+  "type": "booking_cancelled",
+  "channel": "whatsapp",
+  "message": "Hola {{client_name}}, tu turno para {{service}} del {{date}} a las {{time}} fue cancelado. Para reagendar podés ingresar a {{booking_url}}."
+}
