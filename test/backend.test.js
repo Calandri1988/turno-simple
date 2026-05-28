@@ -205,6 +205,21 @@ async function createReservation(overrides = {}) {
   });
 }
 
+async function createDepositService(id = "sena-test", depositAmount = 1000) {
+  return adminRequest(`${DEMO_API}/admin/services`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id,
+      name: "Servicio con seña",
+      durationMinutes: 30,
+      requiresDeposit: true,
+      depositAmount,
+      paymentInstructions: "",
+    }),
+  });
+}
+
 async function insertNotification(slug = "demo", overrides = {}) {
   return withDb(async (db) => {
     const business = await db.get("SELECT id FROM businesses WHERE slug = ?", slug);
@@ -610,6 +625,8 @@ test("POST /api/businesses/demo/reservations crea reserva valida y devuelve 201"
   assert.equal(response.status, 201);
   assert.equal(response.body.businessId > 0, true);
   assert.equal(response.body.serviceId, "consulta");
+  assert.equal(typeof response.body.cancelToken, "string");
+  assert.equal(response.body.cancelToken.length, 64);
 });
 
 test("crear reserva encola confirmacion y recordatorio", async () => {
@@ -671,6 +688,59 @@ test("no encola recordatorio si el turno empieza en menos de 24 horas", async ()
   assert.equal(notifications[0].recipient, "5493549504056");
 });
 
+test("reserva con seña encola pedido de pago y no recordatorio", async () => {
+  await createDepositService("sena-notificacion", 1800);
+  const response = await createReservation({
+    serviceId: "sena-notificacion",
+    professionalId: 1,
+    time: "09:00",
+    customerName: "Cliente Seña",
+    customerPhone: "3549504056",
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal(response.body.depositStatus, "pending");
+
+  const notifications = await withDb((db) => db.all(
+    "SELECT type, message FROM notifications WHERE booking_id = ? ORDER BY type",
+    response.body.id,
+  ));
+
+  assert.deepEqual(notifications.map((item) => item.type), ["booking_payment_request"]);
+  assert.ok(notifications[0].message.includes("1800"));
+  assert.ok(notifications[0].message.includes(`/demo/cancelar/${response.body.cancelToken}`));
+});
+
+test("confirmar pago encola confirmacion de seña y recordatorio", async () => {
+  await createDepositService("sena-pago", 2000);
+  const created = await createReservation({
+    serviceId: "sena-pago",
+    professionalId: 1,
+    time: "09:00",
+    customerName: "Cliente Pago",
+  });
+  const confirmed = await adminRequest(`${DEMO_API}/admin/bookings/${created.body.id}/confirm-payment`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  assert.equal(confirmed.status, 200);
+  assert.equal(confirmed.body.status, "confirmado");
+  assert.equal(confirmed.body.depositStatus, "paid");
+
+  const notifications = await withDb((db) => db.all(
+    "SELECT type, status, message FROM notifications WHERE booking_id = ? ORDER BY type",
+    created.body.id,
+  ));
+
+  assert.deepEqual(
+    notifications.map((item) => item.type).sort(),
+    ["booking_payment_confirmed", "booking_payment_request", "booking_reminder_24h"],
+  );
+  assert.equal(notifications.find((item) => item.type === "booking_reminder_24h").status, "pending");
+  assert.ok(notifications.find((item) => item.type === "booking_payment_confirmed").message.includes("Recibimos correctamente"));
+});
+
 test("cancelar reserva cancela recordatorio pendiente y encola cancelacion", async () => {
   const created = await createReservation({
     customerName: "Juan Cancelado",
@@ -729,6 +799,56 @@ test("booking_cancelled en PATCH status cancelado usa PUBLIC_BASE_URL", async ()
 
   assert.ok(cancellation.message.includes("https://turno-simple-production.up.railway.app/demo"));
   assert.equal(cancellation.message.includes("localhost:8080"), false);
+});
+
+test("cancelacion publica cancela reserva y encola booking_cancelled", async () => {
+  const created = await createReservation({
+    customerName: "Cliente Publico",
+    customerPhone: "3549504056",
+  });
+  const page = await fetch(`${baseUrl}/demo/cancelar/${created.body.cancelToken}`);
+  const pageText = await page.text();
+  const cancelled = await fetch(`${baseUrl}/demo/cancelar/${created.body.cancelToken}`, {
+    method: "POST",
+  });
+  const successText = await cancelled.text();
+
+  assert.equal(page.status, 200);
+  assert.ok(pageText.includes("Cancelar turno"));
+  assert.equal(cancelled.status, 200);
+  assert.ok(successText.includes("Turno cancelado"));
+
+  const row = await withDb((db) => db.get(
+    "SELECT status, cancelled_by FROM reservations WHERE id = ?",
+    created.body.id,
+  ));
+  const cancellation = await withDb((db) => db.get(
+    "SELECT type, message FROM notifications WHERE booking_id = ? AND type = 'booking_cancelled'",
+    created.body.id,
+  ));
+
+  assert.equal(row.status, "cancelado");
+  assert.equal(row.cancelled_by, "client");
+  assert.equal(cancellation.type, "booking_cancelled");
+  assert.ok(cancellation.message.includes("Cliente Publico"));
+});
+
+test("cancelacion publica doble no duplica booking_cancelled", async () => {
+  const created = await createReservation();
+  const url = `${baseUrl}/demo/cancelar/${created.body.cancelToken}`;
+  const first = await fetch(url, { method: "POST" });
+  const second = await fetch(url, { method: "POST" });
+  const secondText = await second.text();
+
+  const count = await withDb((db) => db.get(
+    "SELECT COUNT(*) AS count FROM notifications WHERE booking_id = ? AND type = 'booking_cancelled'",
+    created.body.id,
+  ));
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.ok(secondText.includes("ya estaba cancelado"));
+  assert.equal(count.count, 1);
 });
 
 test("un profesional de otro negocio no puede recibir reserva en demo", async () => {
@@ -924,7 +1044,7 @@ test("no permite borrar servicio con reservas existentes", async () => {
   assert.equal(deleted.status, 409);
 });
 
-test("reserva de servicio con seña queda pendiente y ocupa horario", async () => {
+test("reserva de servicio con seña queda con seña pendiente y ocupa horario", async () => {
   await adminRequest(`${DEMO_API}/admin/services`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -949,7 +1069,8 @@ test("reserva de servicio con seña queda pendiente y ocupa horario", async () =
   });
 
   assert.equal(pending.status, 201);
-  assert.equal(pending.body.status, "pendiente");
+  assert.equal(pending.body.status, "reservado");
+  assert.equal(pending.body.depositStatus, "pending");
   assert.equal(overlap.status, 409);
 });
 
@@ -982,7 +1103,7 @@ test("negocio con alias expone datos de pago para servicio con seña sin instruc
   assert.equal(service.paymentInstructions, "");
 });
 
-test("reserva de servicio sin seña queda reservado", async () => {
+test("reserva de servicio sin seña queda confirmado", async () => {
   const response = await createReservation({
     serviceId: "consulta",
     professionalId: 1,
@@ -990,7 +1111,8 @@ test("reserva de servicio sin seña queda reservado", async () => {
   });
 
   assert.equal(response.status, 201);
-  assert.equal(response.body.status, "reservado");
+  assert.equal(response.body.status, "confirmado");
+  assert.equal(response.body.depositStatus, "none");
 });
 
 test("CRUD profesionales admin funciona y no cruza negocios", async () => {
@@ -1094,10 +1216,11 @@ test("horario no permite profesional de otro negocio", async () => {
   assert.equal(response.status, 400);
 });
 
-test("reservas nuevas tienen status reservado por defecto", async () => {
+test("reservas nuevas sin seña tienen status confirmado y seña none", async () => {
   const response = await createReservation();
   assert.equal(response.status, 201);
-  assert.equal(response.body.status, "reservado");
+  assert.equal(response.body.status, "confirmado");
+  assert.equal(response.body.depositStatus, "none");
 });
 
 test("GET agenda sin token devuelve 401", async () => {
@@ -1156,13 +1279,13 @@ test("GET agenda filtra por status", async () => {
   await adminRequest(`${DEMO_API}/admin/reservations/${first.body.id}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status: "confirmado" }),
+    body: JSON.stringify({ status: "asistio" }),
   });
-  const response = await adminRequest(`${DEMO_API}/admin/agenda?status=confirmado`);
+  const response = await adminRequest(`${DEMO_API}/admin/agenda?status=asistio`);
 
   assert.equal(response.status, 200);
   assert.equal(response.body.length, 1);
-  assert.equal(response.body[0].status, "confirmado");
+  assert.equal(response.body[0].status, "asistio");
 });
 
 test("PATCH status sin token devuelve 401", async () => {
@@ -1199,7 +1322,7 @@ test("PATCH status valido actualiza correctamente", async () => {
   assert.equal(response.body.status, "asistio");
 });
 
-test("admin puede cambiar pendiente a confirmado", async () => {
+test("admin puede confirmar seña pendiente", async () => {
   await adminRequest(`${DEMO_API}/admin/services`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1213,15 +1336,16 @@ test("admin puede cambiar pendiente a confirmado", async () => {
     }),
   });
   const created = await createReservation({ serviceId: "sena-confirmar", professionalId: 1, time: "09:00" });
-  const response = await adminRequest(`${DEMO_API}/admin/reservations/${created.body.id}/status`, {
-    method: "PATCH",
+  const response = await adminRequest(`${DEMO_API}/admin/bookings/${created.body.id}/confirm-payment`, {
+    method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status: "confirmado" }),
   });
 
-  assert.equal(created.body.status, "pendiente");
+  assert.equal(created.body.status, "reservado");
+  assert.equal(created.body.depositStatus, "pending");
   assert.equal(response.status, 200);
   assert.equal(response.body.status, "confirmado");
+  assert.equal(response.body.depositStatus, "paid");
 });
 
 test("PATCH status no permite modificar reserva de otro negocio", async () => {

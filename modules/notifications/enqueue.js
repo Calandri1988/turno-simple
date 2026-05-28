@@ -71,7 +71,21 @@ async function cancelPendingReminder(bookingId) {
   );
 }
 
+async function cancelPendingBookingNotifications(bookingId) {
+  const database = requireDb();
+  return database.run(
+    `
+      UPDATE notifications
+      SET status = 'cancelled'
+      WHERE booking_id = ?
+        AND status = 'pending'
+    `,
+    bookingId,
+  );
+}
+
 module.exports = {
+  cancelPendingBookingNotifications,
   cancelPendingReminder,
   configureNotificationsDatabase,
   enqueueNotification,

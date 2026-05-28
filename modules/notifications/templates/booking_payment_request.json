@@ -1,0 +1,5 @@
+{
+  "type": "booking_payment_request",
+  "channel": "whatsapp",
+  "message": "Hola {{client_name}} 😊\n\nYa reservamos tu turno para {{service}} el {{date}} a las {{time}}.\n\nPara confirmarlo solo falta la seña de ${{deposit_amount}}.\n\nAlias:\n{{payment_alias}}\n\nCuando hagas la transferencia, enviá el comprobante respondiendo este mensaje y el negocio lo revisará.\n\nSi necesitás cancelar el turno:\n{{cancel_url}}\n\nMuchas gracias."
+}

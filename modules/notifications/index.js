@@ -1,4 +1,5 @@
 const {
+  cancelPendingBookingNotifications,
   cancelPendingReminder,
   configureNotificationsDatabase,
   enqueueNotification,
@@ -18,6 +19,7 @@ function configureNotifications(database) {
 }
 
 module.exports = {
+  cancelPendingBookingNotifications,
   cancelPendingReminder,
   configureNotifications,
   enqueueNotification,

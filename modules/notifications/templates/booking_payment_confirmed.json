@@ -1,0 +1,5 @@
+{
+  "type": "booking_payment_confirmed",
+  "channel": "whatsapp",
+  "message": "Hola {{client_name}} 😊\n\nRecibimos correctamente tu seña.\n\nTu turno para {{service}} el {{date}} a las {{time}} quedó confirmado.\n\nTe esperamos en {{business_name}}.\n\nSi necesitás cancelar:\n{{cancel_url}}"
+}

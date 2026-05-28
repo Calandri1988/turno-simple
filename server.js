@@ -1,11 +1,12 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const path = require("path");
 const sqlite3 = require("sqlite3");
 const { open } = require("sqlite");
 const {
-  cancelPendingReminder,
+  cancelPendingBookingNotifications,
   configureNotifications,
   enqueueNotification,
   renderTemplate,
@@ -23,6 +24,7 @@ const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "turnos.sqlite");
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const reservationStatuses = new Set(["pendiente", "reservado", "confirmado", "cancelado", "asistio", "no_asistio"]);
+const depositStatuses = new Set(["none", "pending", "paid"]);
 const adminRoles = new Set(["owner", "staff"]);
 
 const servicesSeed = [
@@ -424,6 +426,9 @@ async function ensureReservationsTable(demoBusinessId) {
   const hasDate = columns.some((column) => column.name === "date");
   const hasStatus = columns.some((column) => column.name === "status");
   const hasDurationMinutes = columns.some((column) => column.name === "duration_minutes");
+  const hasDepositStatus = columns.some((column) => column.name === "deposit_status");
+  const hasCancelToken = columns.some((column) => column.name === "cancel_token");
+  const hasCancelledBy = columns.some((column) => column.name === "cancelled_by");
   const durationColumn = columns.find((column) => column.name === "duration_minutes");
   const table = await db.get(
     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'reservations'",
@@ -434,6 +439,7 @@ async function ensureReservationsTable(demoBusinessId) {
   const needsDateMigration = columns.length > 0 && hasProfessionalId && !hasDate;
   const needsBusinessMigration = columns.length > 0 && hasProfessionalId && !hasBusinessId;
   const needsStatusMigration = columns.length > 0 && hasProfessionalId && !hasStatus;
+  const needsCancellationMigration = columns.length > 0 && hasProfessionalId && (!hasDepositStatus || !hasCancelToken || !hasCancelledBy);
 
   if (columns.length > 0 && !hasProfessionalId) {
     await db.exec("DROP TABLE reservations");
@@ -448,14 +454,17 @@ async function ensureReservationsTable(demoBusinessId) {
       needsMissingDurationMigration ||
       needsDateMigration ||
       needsBusinessMigration ||
-      needsStatusMigration
+      needsStatusMigration ||
+      needsCancellationMigration
     )
   ) {
     await migrateReservationsTable(demoBusinessId);
+    await ensureReservationsIndexes();
     return;
   }
 
   await createReservationsTable("reservations");
+  await ensureReservationsIndexes();
 }
 
 async function createReservationsTable(tableName) {
@@ -471,6 +480,9 @@ async function createReservationsTable(tableName) {
       time TEXT NOT NULL,
       duration_minutes INTEGER NOT NULL DEFAULT 30,
       status TEXT NOT NULL DEFAULT 'reservado',
+      deposit_status TEXT NOT NULL DEFAULT 'none',
+      cancel_token TEXT,
+      cancelled_by TEXT,
       customer_name TEXT NOT NULL,
       customer_phone TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -479,6 +491,18 @@ async function createReservationsTable(tableName) {
       UNIQUE(business_id, professional_id, date, time)
     )
   `);
+}
+
+async function ensureReservationsIndexes() {
+  await db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_reservations_cancel_token
+    ON reservations(cancel_token)
+    WHERE cancel_token IS NOT NULL
+  `);
+}
+
+function createCancelToken() {
+  return crypto.randomBytes(32).toString("hex");
 }
 
 async function migrateReservationsTable(demoBusinessId) {
@@ -515,11 +539,14 @@ async function migrateReservationsTable(demoBusinessId) {
           time,
           duration_minutes,
           status,
+          deposit_status,
+          cancel_token,
+          cancelled_by,
           customer_name,
           customer_phone,
           created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         row.id,
@@ -532,6 +559,13 @@ async function migrateReservationsTable(demoBusinessId) {
         row.time,
         durationMinutes,
         reservationStatuses.has(row.status) ? row.status : "reservado",
+        depositStatuses.has(row.deposit_status)
+          ? row.deposit_status
+          : row.status === "pendiente"
+            ? "pending"
+            : "none",
+        row.cancel_token || createCancelToken(),
+        row.cancelled_by || null,
         row.customer_name,
         row.customer_phone,
         row.created_at,
@@ -601,6 +635,9 @@ function mapReservation(row) {
     time: row.time,
     durationMinutes: row.duration_minutes,
     status: row.status || "reservado",
+    depositStatus: row.deposit_status || "none",
+    cancelToken: row.cancel_token || "",
+    cancelledBy: row.cancelled_by || "",
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
     createdAt: row.created_at,
@@ -614,7 +651,7 @@ function mapService(row) {
     name: row.name,
     durationMinutes: row.duration_minutes,
     price: row.price,
-    requiresDeposit: Boolean(row.requires_deposit),
+    requiresDeposit: Boolean(row.requires_deposit) || Number(row.deposit_amount) > 0,
     depositAmount: row.deposit_amount || 0,
     paymentInstructions: row.payment_instructions || "",
   };
@@ -654,12 +691,31 @@ function mapSchedule(row) {
 }
 
 async function enqueueBookingCreatedNotifications(business, booking) {
+  if (booking.deposit_status === "pending") {
+    await enqueuePaymentRequestNotification(business, booking);
+    return;
+  }
+
+  await enqueueBookingConfirmedNotification(business, booking);
+  await enqueueBookingReminderNotification(business, booking);
+}
+
+function buildBookingPublicUrl(business, req) {
+  return `${getPublicBaseUrl(req)}/${business.slug}`;
+}
+
+function buildCancelUrl(business, booking, req) {
+  return `${buildBookingPublicUrl(business, req)}/cancelar/${booking.cancel_token}`;
+}
+
+async function enqueueBookingConfirmedNotification(business, booking, req) {
   const confirmed = renderTemplate("booking_confirmed", {
     client_name: booking.customer_name,
     service: booking.service_name,
     date: formatDate(booking.date),
     time: booking.time,
     business_name: business.name,
+    cancel_url: buildCancelUrl(business, booking, req),
   });
 
   await enqueueNotification({
@@ -671,7 +727,59 @@ async function enqueueBookingCreatedNotifications(business, booking) {
     message: confirmed.message,
     scheduledFor: new Date(),
   });
+}
 
+async function enqueuePaymentRequestNotification(business, booking, req) {
+  const service = await db.get(
+    "SELECT deposit_amount FROM services WHERE business_id = ? AND id = ?",
+    [business.id, booking.service_id],
+  );
+  const paymentRequest = renderTemplate("booking_payment_request", {
+    client_name: booking.customer_name,
+    service: booking.service_name,
+    date: formatDate(booking.date),
+    time: booking.time,
+    deposit_amount: service?.deposit_amount || booking.deposit_amount || 0,
+    payment_alias: business.payment_alias || "Consultar con el negocio",
+    cancel_url: buildCancelUrl(business, booking, req),
+  });
+
+  await enqueueNotification({
+    businessId: business.id,
+    bookingId: booking.id,
+    type: "booking_payment_request",
+    channel: paymentRequest.channel,
+    recipient: booking.customer_phone,
+    message: paymentRequest.message,
+    scheduledFor: new Date(),
+  });
+}
+
+async function enqueuePaymentConfirmedNotification(business, booking, req) {
+  const paymentConfirmed = renderTemplate("booking_payment_confirmed", {
+    client_name: booking.customer_name,
+    service: booking.service_name,
+    date: formatDate(booking.date),
+    time: booking.time,
+    business_name: business.name,
+    cancel_url: buildCancelUrl(business, booking, req),
+  });
+
+  await enqueueNotification({
+    businessId: business.id,
+    bookingId: booking.id,
+    type: "booking_payment_confirmed",
+    channel: paymentConfirmed.channel,
+    recipient: booking.customer_phone,
+    message: paymentConfirmed.message,
+    scheduledFor: new Date(),
+  });
+}
+
+async function enqueueBookingReminderNotification(business, booking, req) {
+  if (booking.deposit_status === "pending") {
+    return;
+  }
   const bookingDateTime = buildBookingDateTime(booking.date, booking.time);
   if (bookingDateTime.getTime() - Date.now() < 24 * 60 * 60 * 1000) {
     console.log("[notifications] Skipped reminder: booking starts in less than 24h");
@@ -684,6 +792,7 @@ async function enqueueBookingCreatedNotifications(business, booking) {
     service: booking.service_name,
     time: booking.time,
     business_name: business.name,
+    cancel_url: buildCancelUrl(business, booking, req),
   });
 
   await enqueueNotification({
@@ -698,11 +807,10 @@ async function enqueueBookingCreatedNotifications(business, booking) {
 }
 
 async function enqueueBookingCancelledNotification(business, booking, req) {
-  await cancelPendingReminder(booking.id);
-  const baseUrl = getPublicBaseUrl(req);
-  const bookingUrl = `${baseUrl}/${business.slug}`;
+  await cancelPendingBookingNotifications(booking.id);
+  const bookingUrl = buildBookingPublicUrl(business, req);
 
-  console.log("[notifications] booking_cancelled baseUrl=", baseUrl);
+  console.log("[notifications] booking_cancelled baseUrl=", getPublicBaseUrl(req));
   console.log("[notifications] booking_cancelled bookingUrl=", bookingUrl);
 
   const cancelled = renderTemplate("booking_cancelled", {
@@ -866,6 +974,15 @@ function csvEscape(value) {
     return `"${text.replaceAll('"', '""')}"`;
   }
   return text;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 async function buildAgendaQuery(business, query) {
@@ -1134,6 +1251,7 @@ async function findAvailableProfessional(businessId, date, time, durationMinutes
 }
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 app.use(express.static(__dirname, { index: false }));
 
 app.get("/api/businesses/:slug", async (req, res) => {
@@ -1757,6 +1875,43 @@ app.get("/api/businesses/:slug/admin/agenda/export.csv", requireAdmin, async (re
   res.type("text/csv").send(lines.join("\n"));
 });
 
+app.post("/api/businesses/:slug/admin/bookings/:id/confirm-payment", requireAdmin, async (req, res) => {
+  const business = await getBusinessOr404(req, res);
+  if (!business) return;
+
+  const id = parseRequiredPositiveInteger(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: "Id invalido." });
+    return;
+  }
+
+  const booking = await db.get(
+    "SELECT * FROM reservations WHERE business_id = ? AND id = ?",
+    [business.id, id],
+  );
+  if (!booking) {
+    res.status(404).json({ error: "Reserva no encontrada." });
+    return;
+  }
+  if (booking.deposit_status !== "pending") {
+    res.status(400).json({ error: "Esta reserva no tiene seña pendiente." });
+    return;
+  }
+
+  await db.run(
+    "UPDATE reservations SET deposit_status = 'paid', status = 'confirmado' WHERE business_id = ? AND id = ?",
+    [business.id, id],
+  );
+  const row = await db.get(
+    "SELECT * FROM reservations WHERE business_id = ? AND id = ?",
+    [business.id, id],
+  );
+
+  await enqueuePaymentConfirmedNotification(business, row, req);
+  await enqueueBookingReminderNotification(business, row, req);
+  res.json(mapReservation(row));
+});
+
 app.patch("/api/businesses/:slug/admin/reservations/:id/status", requireAdmin, async (req, res) => {
   const business = await getBusinessOr404(req, res);
   if (!business) return;
@@ -1768,10 +1923,15 @@ app.patch("/api/businesses/:slug/admin/reservations/:id/status", requireAdmin, a
     return;
   }
 
-  const result = await db.run(
-    "UPDATE reservations SET status = ? WHERE business_id = ? AND id = ?",
-    [status, business.id, id],
-  );
+  const result = status === "cancelado"
+    ? await db.run(
+        "UPDATE reservations SET status = ?, cancelled_by = COALESCE(cancelled_by, 'admin') WHERE business_id = ? AND id = ?",
+        [status, business.id, id],
+      )
+    : await db.run(
+        "UPDATE reservations SET status = ? WHERE business_id = ? AND id = ?",
+        [status, business.id, id],
+      );
 
   if (result.changes === 0) {
     res.status(404).json({ error: "Reserva no encontrada." });
@@ -1891,7 +2051,10 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
       return;
     }
 
-    const initialStatus = service.requires_deposit ? "pendiente" : "reservado";
+    const requiresDeposit = Number(service.deposit_amount) > 0;
+    const initialStatus = requiresDeposit ? "reservado" : "confirmado";
+    const depositStatus = requiresDeposit ? "pending" : "none";
+    const cancelToken = createCancelToken();
     const result = await db.run(
       `
         INSERT INTO reservations (
@@ -1904,10 +2067,12 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
           time,
           duration_minutes,
           status,
+          deposit_status,
+          cancel_token,
           customer_name,
           customer_phone
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         business.id,
@@ -1919,6 +2084,8 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
         reservation.time,
         service.duration_minutes,
         initialStatus,
+        depositStatus,
+        cancelToken,
         reservation.customerName,
         reservation.customerPhone,
       ],
@@ -1981,6 +2148,108 @@ app.delete("/api/businesses/:slug/reservations", requireAdmin, async (req, res) 
 
   await db.run("DELETE FROM reservations WHERE business_id = ?", business.id);
   res.status(204).end();
+});
+
+async function getBookingByCancelToken(slug, token) {
+  const business = await getBusinessBySlug(slug);
+  if (!business) return { business: null, booking: null };
+  const booking = await db.get(
+    "SELECT * FROM reservations WHERE business_id = ? AND cancel_token = ?",
+    [business.id, cleanText(token)],
+  );
+  return { business, booking };
+}
+
+function renderCancelPage({ business, booking, type }) {
+  const title = type === "success"
+    ? "Turno cancelado"
+    : type === "already"
+      ? "Este turno ya estaba cancelado"
+      : type === "invalid"
+        ? "No encontramos este turno"
+        : "Cancelar turno";
+  const description = type === "success"
+    ? "Listo, cancelamos tu turno correctamente."
+    : type === "already"
+      ? "No hace falta hacer nada mas."
+      : type === "invalid"
+        ? "El enlace puede estar vencido o mal copiado. Si tenes dudas, comunicate con el negocio."
+        : "Revisa los datos antes de confirmar la cancelacion.";
+  const details = booking
+    ? `
+        <div class="summary-box">
+          <strong>${escapeHtml(booking.customer_name)}</strong>
+          <span>${escapeHtml(booking.service_name)}</span>
+          <span>${escapeHtml(formatDate(booking.date))} a las ${escapeHtml(booking.time)}</span>
+        </div>
+      `
+    : "";
+  const action = type === "confirm"
+    ? `
+        <form method="post">
+          <button class="danger-button cancel-page-action" type="submit">Cancelar turno</button>
+        </form>
+      `
+    : business
+      ? `<a class="primary-button link-button cancel-page-action" href="/${escapeHtml(business.slug)}">Reservar otro turno</a>`
+      : "";
+
+  return `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeHtml(title)} - ${escapeHtml(business?.name || "Turno Simple")}</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell cancel-page">
+      <section class="success-screen">
+        <p>${escapeHtml(business?.name || "Turno Simple")}</p>
+        <h1>${escapeHtml(title)}</h1>
+        <span>${escapeHtml(description)}</span>
+        ${details}
+        ${action}
+      </section>
+    </main>
+  </body>
+</html>`;
+}
+
+app.get("/:slug/cancelar/:token", async (req, res) => {
+  const { business, booking } = await getBookingByCancelToken(req.params.slug, req.params.token);
+  if (!business || !booking) {
+    res.status(404).send(renderCancelPage({ business, booking, type: "invalid" }));
+    return;
+  }
+  if (booking.status === "cancelado") {
+    res.send(renderCancelPage({ business, booking, type: "already" }));
+    return;
+  }
+  res.send(renderCancelPage({ business, booking, type: "confirm" }));
+});
+
+app.post("/:slug/cancelar/:token", async (req, res) => {
+  const { business, booking } = await getBookingByCancelToken(req.params.slug, req.params.token);
+  if (!business || !booking) {
+    res.status(404).send(renderCancelPage({ business, booking, type: "invalid" }));
+    return;
+  }
+  if (booking.status === "cancelado") {
+    res.send(renderCancelPage({ business, booking, type: "already" }));
+    return;
+  }
+
+  await db.run(
+    "UPDATE reservations SET status = 'cancelado', cancelled_by = 'client' WHERE business_id = ? AND id = ?",
+    [business.id, booking.id],
+  );
+  const cancelled = await db.get(
+    "SELECT * FROM reservations WHERE business_id = ? AND id = ?",
+    [business.id, booking.id],
+  );
+  await enqueueBookingCancelledNotification(business, cancelled, req);
+  res.send(renderCancelPage({ business, booking: cancelled, type: "success" }));
 });
 
 app.get("/", (req, res) => {

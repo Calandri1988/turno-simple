@@ -71,6 +71,8 @@ function normalizeReservation(item) {
     date: String(item.date || ""),
     time: String(item.time || ""),
     status: String(item.status || "reservado"),
+    depositStatus: String(item.depositStatus || "none"),
+    cancelledBy: String(item.cancelledBy || ""),
     customerName: String(item.customerName || ""),
     customerPhone: String(item.customerPhone || ""),
   };
@@ -357,7 +359,7 @@ function renderAgendaList(items, emptyText) {
         <small>${escapeHtml(formatDateLabel(reservation.date))} - ${escapeHtml(reservation.customerPhone)}</small>
       </div>
       ${statusSelect(reservation)}
-      ${reservation.status === "pendiente" ? `<button class="secondary-button" type="button" data-action="confirm-deposit" data-id="${reservation.id}">Confirmar seña recibida</button>` : ""}
+      ${reservation.depositStatus === "pending" ? `<button class="secondary-button" type="button" data-action="confirm-deposit" data-id="${reservation.id}">✓ Seña recibida / Confirmar turno</button>` : ""}
       <button class="secondary-button" type="button" data-action="whatsapp" data-id="${reservation.id}">WhatsApp</button>
       <button class="danger-button" type="button" data-action="cancel-status" data-id="${reservation.id}">Cancelar</button>
     </article>
@@ -768,7 +770,8 @@ root.addEventListener("click", async (event) => {
     return;
   }
   if (action === "confirm-deposit") {
-    await sendJson(`${BUSINESS_API_URL}/admin/reservations/${id}/status`, "PATCH", { status: "confirmado" });
+    await sendJson(`${BUSINESS_API_URL}/admin/bookings/${id}/confirm-payment`, "POST", {});
+    window.alert("Seña confirmada. Turno confirmado.");
     await refreshReservationsOnly();
     return;
   }

@@ -27,6 +27,7 @@ const state = {
   customerName: "",
   customerPhone: "",
   assignedProfessionalName: "",
+  cancelUrl: "",
 };
 
 function escapeHtml(value) {
@@ -300,6 +301,7 @@ function renderSuccess() {
           ${paymentInstructions ? `<span>${escapeHtml(paymentInstructions)}</span>` : ""}
         </div>
         ${whatsappLink ? `<a class="primary-button link-button" href="${whatsappLink}" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>` : ""}
+        ${state.cancelUrl ? `<a class="text-button link-button" href="${escapeHtml(state.cancelUrl)}">Cancelar turno</a>` : ""}
         <button class="primary-button" type="button" data-restart>Reservar otro turno</button>
       </div>
     `;
@@ -317,6 +319,7 @@ function renderSuccess() {
         <span>${escapeHtml(state.assignedProfessionalName)} - ${escapeHtml(state.date.label)} ${escapeHtml(state.time)}</span>
         <span>${escapeHtml(state.customerName)} - ${escapeHtml(state.customerPhone)}</span>
       </div>
+      ${state.cancelUrl ? `<a class="text-button link-button" href="${escapeHtml(state.cancelUrl)}">Cancelar turno</a>` : ""}
       <button class="primary-button" type="button" data-restart>Reservar otro turno</button>
     </div>
   `;
@@ -364,6 +367,7 @@ async function confirmBooking() {
 
   const reservation = await response.json();
   state.assignedProfessionalName = reservation.professionalName || state.professional?.name || "Profesional asignado";
+  state.cancelUrl = reservation.cancelToken ? `/${BUSINESS_SLUG}/cancelar/${reservation.cancelToken}` : "";
 }
 
 root.addEventListener("click", (event) => {
@@ -410,6 +414,7 @@ root.addEventListener("click", (event) => {
       customerName: "",
       customerPhone: "",
       assignedProfessionalName: "",
+      cancelUrl: "",
     });
     render();
   }

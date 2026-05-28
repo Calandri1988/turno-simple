@@ -1,5 +1,5 @@
 {
   "type": "booking_reminder_24h",
   "channel": "whatsapp",
-  "message": "Hola {{client_name}}, te recordamos que mañana tenés turno para {{service}} a las {{time}} en {{business_name}}. Si no podés asistir, por favor cancelá con anticipación."
+  "message": "Hola {{client_name}} 👋\n\nTe recordamos que mañana tenés turno para {{service}} a las {{time}} en {{business_name}}.\n\nTe esperamos.\n\nSi no podés asistir:\n{{cancel_url}}"
 }
