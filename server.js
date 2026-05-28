@@ -11,6 +11,7 @@ const {
   renderTemplate,
   startWorker,
 } = require("./modules/notifications");
+const { getPublicBaseUrl } = require("./modules/notifications/getPublicBaseUrl");
 const {
   buildBookingDateTime,
   formatDate,
@@ -21,7 +22,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "turnos.sqlite");
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || process.env.APP_URL || `http://localhost:${PORT}`;
 const reservationStatuses = new Set(["pendiente", "reservado", "confirmado", "cancelado", "asistio", "no_asistio"]);
 const adminRoles = new Set(["owner", "staff"]);
 
@@ -697,15 +697,20 @@ async function enqueueBookingCreatedNotifications(business, booking) {
   });
 }
 
-async function enqueueBookingCancelledNotification(business, booking) {
+async function enqueueBookingCancelledNotification(business, booking, req) {
   await cancelPendingReminder(booking.id);
+  const baseUrl = getPublicBaseUrl(req);
+  const bookingUrl = `${baseUrl}/${business.slug}`;
+
+  console.log("[notifications] booking_cancelled baseUrl=", baseUrl);
+  console.log("[notifications] booking_cancelled bookingUrl=", bookingUrl);
 
   const cancelled = renderTemplate("booking_cancelled", {
     client_name: booking.customer_name,
     service: booking.service_name,
     date: formatDate(booking.date),
     time: booking.time,
-    booking_url: `${PUBLIC_BASE_URL.replace(/\/$/, "")}/${business.slug}`,
+    booking_url: bookingUrl,
   });
 
   await enqueueNotification({
@@ -1693,6 +1698,36 @@ app.delete("/api/businesses/:slug/admin/schedules/:id", requireAdmin, async (req
   res.status(204).end();
 });
 
+app.get("/api/businesses/:slug/admin/notifications", requireAdmin, async (req, res) => {
+  const business = await getBusinessOr404(req, res);
+  if (!business) return;
+
+  const rows = await db.all(
+    `
+      SELECT
+        id,
+        type,
+        channel,
+        recipient,
+        status,
+        attempts,
+        scheduled_for,
+        sent_at,
+        last_error,
+        created_at,
+        substr(message, 1, 80) AS message_preview,
+        message
+      FROM notifications
+      WHERE business_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT 100
+    `,
+    [business.id],
+  );
+
+  res.json({ notifications: rows });
+});
+
 app.get("/api/businesses/:slug/admin/agenda", requireAdmin, async (req, res) => {
   const agenda = await getAgendaRows(req, res);
   if (!agenda) return;
@@ -1748,7 +1783,7 @@ app.patch("/api/businesses/:slug/admin/reservations/:id/status", requireAdmin, a
     [business.id, id],
   );
   if (status === "cancelado") {
-    await enqueueBookingCancelledNotification(business, row);
+    await enqueueBookingCancelledNotification(business, row, req);
   }
   res.json(mapReservation(row));
 });
@@ -1936,7 +1971,7 @@ app.delete("/api/businesses/:slug/reservations/:id", requireAdmin, async (req, r
     return;
   }
 
-  await enqueueBookingCancelledNotification(business, booking);
+  await enqueueBookingCancelledNotification(business, booking, req);
   res.status(204).end();
 });
 
@@ -1950,6 +1985,10 @@ app.delete("/api/businesses/:slug/reservations", requireAdmin, async (req, res) 
 
 app.get("/", (req, res) => {
   res.redirect("/demo");
+});
+
+app.get("/:slug/admin/notifications", (req, res) => {
+  res.sendFile(path.join(__dirname, "admin.html"));
 });
 
 app.get("/:slug/admin", (req, res) => {

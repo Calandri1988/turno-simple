@@ -1564,6 +1564,27 @@ body {
   min-width: 92px;
 }
 
+.admin-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.admin-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fffdf9;
+  color: var(--brand-dark);
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
 .admin-workspace {
   gap: 16px;
   padding: 0;
@@ -1647,6 +1668,96 @@ body {
   min-height: 26px;
   margin-left: 0;
   text-transform: capitalize;
+}
+
+.notifications-panel {
+  overflow: hidden;
+}
+
+.notifications-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notifications-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fffdf9;
+}
+
+.notifications-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.notifications-table th,
+.notifications-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-size: 0.86rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.notifications-table th {
+  background: var(--panel-soft);
+  color: var(--brand-dark);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.notification-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.notification-pending {
+  background: #fff4e8;
+  color: #9a4b05;
+}
+
+.notification-sent {
+  background: #e9f8f0;
+  color: #17613f;
+}
+
+.notification-failed {
+  background: #fdecec;
+  color: #9f1d1d;
+}
+
+.notification-cancelled {
+  background: #eceff3;
+  color: #49515c;
+}
+
+.notification-row-failed {
+  background: #fff5f5;
+}
+
+.notification-error span {
+  color: #9f1d1d;
+  cursor: help;
+  text-decoration: underline dotted;
+}
+
+.notification-message {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
 }
 
 .admin-form,

@@ -2,11 +2,14 @@ const root = document.querySelector("#admin-root");
 const logoutButton = document.querySelector("#logout-button");
 const businessNameElement = document.querySelector("#business-name");
 const businessMetaElement = document.querySelector("#business-meta");
+const adminHomeLink = document.querySelector("#admin-home-link");
+const adminNotificationsLink = document.querySelector("#admin-notifications-link");
 
 const parts = window.location.pathname.split("/").filter(Boolean);
 const BUSINESS_SLUG = parts[0] || "demo";
 const BUSINESS_API_URL = `/api/businesses/${BUSINESS_SLUG}`;
 const TOKEN_KEY = `turno-simple-admin-token-${BUSINESS_SLUG}`;
+const isNotificationsPage = parts[1] === "admin" && parts[2] === "notifications";
 
 const weekdayLabels = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
 const statusOptions = ["pendiente", "reservado", "confirmado", "cancelado", "asistio", "no_asistio"];
@@ -27,6 +30,9 @@ let filterProfessionalId = "";
 let pollingId = null;
 let lastUpdatedAt = null;
 let knownReservationIds = new Set();
+
+if (adminHomeLink) adminHomeLink.href = `/${BUSINESS_SLUG}/admin`;
+if (adminNotificationsLink) adminNotificationsLink.href = `/${BUSINESS_SLUG}/admin/notifications`;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -474,6 +480,131 @@ function renderSchedules() {
   `;
 }
 
+function formatDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function notificationStatusBadge(status) {
+  return `<span class="notification-badge notification-${escapeHtml(status)}">${escapeHtml(status)}</span>`;
+}
+
+function renderNotificationsTable(notifications) {
+  if (notifications.length === 0) {
+    return `<tr><td colspan="10">No hay notificaciones todavia.</td></tr>`;
+  }
+
+  return notifications.map((notification) => {
+    const fullMessage = escapeHtml(notification.message || "");
+    const preview = escapeHtml(notification.message_preview || notification.message || "");
+    const lastError = escapeHtml(notification.last_error || "");
+    return `
+      <tr class="notification-row-${escapeHtml(notification.status)}">
+        <td>${escapeHtml(notification.id)}</td>
+        <td>${escapeHtml(notification.type)}</td>
+        <td>${escapeHtml(notification.channel)}</td>
+        <td>${escapeHtml(notification.recipient)}</td>
+        <td>${notificationStatusBadge(notification.status)}</td>
+        <td>${escapeHtml(notification.attempts)}</td>
+        <td>${escapeHtml(formatDateTime(notification.scheduled_for))}</td>
+        <td>${escapeHtml(formatDateTime(notification.sent_at))}</td>
+        <td class="notification-error">${lastError ? `<span title="${lastError}">ver</span>` : "-"}</td>
+        <td class="notification-message" title="${fullMessage}">${preview}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function renderNotificationsSummary(notifications) {
+  const counts = {
+    pending: 0,
+    sent: 0,
+    failed: 0,
+    cancelled: 0,
+  };
+  notifications.forEach((notification) => {
+    if (Object.hasOwn(counts, notification.status)) counts[notification.status] += 1;
+  });
+  return `
+    <span class="notification-badge notification-pending">Pendientes: ${counts.pending}</span>
+    <span class="notification-badge notification-sent">Enviadas: ${counts.sent}</span>
+    <span class="notification-badge notification-failed">Fallidas: ${counts.failed}</span>
+    <span class="notification-badge notification-cancelled">Canceladas: ${counts.cancelled}</span>
+  `;
+}
+
+async function loadNotifications() {
+  const response = await adminFetch(`${BUSINESS_API_URL}/admin/notifications`);
+  if (!response.ok) throw new Error("No se pudieron cargar las notificaciones.");
+  const data = await response.json();
+  return Array.isArray(data.notifications) ? data.notifications : [];
+}
+
+async function refreshNotificationsPanel() {
+  const notifications = await loadNotifications();
+  const summary = root.querySelector("[data-notifications-summary]");
+  const body = root.querySelector("[data-notifications-body]");
+  const updated = root.querySelector("[data-notifications-updated]");
+  if (summary) summary.innerHTML = renderNotificationsSummary(notifications);
+  if (body) body.innerHTML = renderNotificationsTable(notifications);
+  if (updated) updated.textContent = `Actualizado ${formatDateTime(new Date().toISOString())}`;
+}
+
+async function renderNotificationsPanel() {
+  if (pollingId) {
+    clearInterval(pollingId);
+    pollingId = null;
+  }
+  logoutButton.hidden = false;
+  root.innerHTML = `
+    <section class="admin-section notifications-panel">
+      <div class="admin-section-header">
+        <div>
+          <h2>Cola de notificaciones</h2>
+          <p>Ultimos mensajes encolados por este negocio.</p>
+        </div>
+        <button id="btn-refresh-notifications" class="secondary-button" type="button" data-action="refresh-notifications">Actualizar</button>
+      </div>
+      <div class="notifications-summary" data-notifications-summary></div>
+      <small class="admin-update-line" data-notifications-updated></small>
+      <div class="notifications-table-wrap">
+        <table class="notifications-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Tipo</th>
+              <th>Canal</th>
+              <th>Destinatario</th>
+              <th>Estado</th>
+              <th>Intentos</th>
+              <th>Programado para</th>
+              <th>Enviado en</th>
+              <th>Error</th>
+              <th>Mensaje</th>
+            </tr>
+          </thead>
+          <tbody data-notifications-body>
+            <tr><td colspan="10">Cargando notificaciones...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+  await refreshNotificationsPanel();
+  pollingId = setInterval(() => {
+    if (!token) return;
+    refreshNotificationsPanel().catch(() => {});
+  }, 30000);
+}
+
 async function renderAdmin() {
   const reservations = await loadAdminData();
   knownReservationIds = new Set(reservations.map((item) => item.id));
@@ -515,9 +646,17 @@ async function renderAdmin() {
   `;
 }
 
+async function renderCurrentAdminView() {
+  if (isNotificationsPage) {
+    await renderNotificationsPanel();
+    return;
+  }
+  await renderAdmin();
+}
+
 async function refresh() {
   try {
-    await renderAdmin();
+    await renderCurrentAdminView();
   } catch (error) {
     if (token) root.innerHTML = `<div class="admin-empty"><strong>No pudimos cargar el panel.</strong></div>`;
   }
@@ -532,7 +671,7 @@ root.addEventListener("submit", async (event) => {
     if (form.id === "login-form") {
       await login(data.email, data.password);
       await refresh();
-      startPolling();
+      if (!isNotificationsPage) startPolling();
       return;
     }
     if (form.id === "filter-form") {
@@ -615,6 +754,14 @@ root.addEventListener("click", async (event) => {
     }
     return;
   }
+  if (action === "refresh-notifications" || button.id === "btn-refresh-notifications") {
+    try {
+      await refreshNotificationsPanel();
+    } catch (error) {
+      window.alert("No pudimos actualizar las notificaciones.");
+    }
+    return;
+  }
   if (action === "cancel-status") {
     await sendJson(`${BUSINESS_API_URL}/admin/reservations/${id}/status`, "PATCH", { status: "cancelado" });
     await refreshReservationsOnly();
@@ -672,7 +819,7 @@ async function init() {
   if (!token) renderLogin();
   else {
     await refresh();
-    startPolling();
+    if (!isNotificationsPage) startPolling();
   }
 }
 

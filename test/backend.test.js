@@ -205,6 +205,48 @@ async function createReservation(overrides = {}) {
   });
 }
 
+async function insertNotification(slug = "demo", overrides = {}) {
+  return withDb(async (db) => {
+    const business = await db.get("SELECT id FROM businesses WHERE slug = ?", slug);
+    const createdAt = overrides.createdAt || new Date().toISOString();
+    const scheduledFor = overrides.scheduledFor || createdAt;
+    const result = await db.run(
+      `
+        INSERT INTO notifications (
+          business_id,
+          booking_id,
+          type,
+          channel,
+          recipient,
+          message,
+          status,
+          attempts,
+          scheduled_for,
+          sent_at,
+          last_error,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        business.id,
+        overrides.bookingId ?? null,
+        overrides.type || "booking_confirmed",
+        overrides.channel || "whatsapp",
+        overrides.recipient || "5493549504056",
+        overrides.message || "Mensaje de prueba para diagnostico",
+        overrides.status || "pending",
+        overrides.attempts ?? 0,
+        scheduledFor,
+        overrides.sentAt || null,
+        overrides.lastError || null,
+        createdAt,
+      ],
+    );
+    return result.lastID;
+  });
+}
+
 before(async () => {
   const port = await getFreePort();
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "turno-simple-test-"));
@@ -216,6 +258,7 @@ before(async () => {
       ...process.env,
       DB_PATH: tempDbPath,
       PORT: String(port),
+      PUBLIC_BASE_URL: "https://turno-simple-production.up.railway.app",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -351,6 +394,97 @@ test("GET /demo/admin carga panel admin", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
   assert.ok(text.includes("admin.js"));
+});
+
+test("GET /demo/admin/notifications carga vista admin de notificaciones", async () => {
+  const response = await fetch(`${baseUrl}/demo/admin/notifications`);
+  const text = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /text\/html/);
+  assert.ok(text.includes("admin.js"));
+  assert.ok(text.includes("admin-notifications-link"));
+});
+
+test("GET /api/businesses/demo/admin/notifications sin token devuelve 401", async () => {
+  const response = await request(`${DEMO_API}/admin/notifications`);
+  assert.equal(response.status, 401);
+});
+
+test("GET /api/businesses/demo/admin/notifications con token valido devuelve 200", async () => {
+  await insertNotification("demo", { message: "Mensaje de diagnostico demo" });
+  const response = await request(`${DEMO_API}/admin/notifications`, {
+    headers: adminHeaders(),
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(Array.isArray(response.body.notifications));
+  assert.equal(response.body.notifications.length, 1);
+  assert.equal(response.body.notifications[0].message, "Mensaje de diagnostico demo");
+  assert.equal(response.body.notifications[0].message_preview, "Mensaje de diagnostico demo");
+});
+
+test("GET admin notifications devuelve solo notificaciones del negocio correspondiente", async () => {
+  await createOtherBusiness();
+  await insertNotification("demo", { message: "Mensaje demo" });
+  await insertNotification("otro", { message: "Mensaje otro" });
+  const response = await request(`${DEMO_API}/admin/notifications`, {
+    headers: adminHeaders(),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.notifications.length, 1);
+  assert.equal(response.body.notifications[0].message, "Mensaje demo");
+});
+
+test("GET admin notifications ordena por created_at DESC", async () => {
+  await insertNotification("demo", {
+    message: "Mas antigua",
+    createdAt: "2026-05-27T10:00:00.000Z",
+  });
+  await insertNotification("demo", {
+    message: "Mas nueva",
+    createdAt: "2026-05-28T10:00:00.000Z",
+  });
+  const response = await request(`${DEMO_API}/admin/notifications`, {
+    headers: adminHeaders(),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(
+    response.body.notifications.map((item) => item.message),
+    ["Mas nueva", "Mas antigua"],
+  );
+});
+
+test("GET admin notifications limita a 100 registros", async () => {
+  for (let index = 0; index < 105; index += 1) {
+    await insertNotification("demo", {
+      message: `Mensaje ${index}`,
+      createdAt: new Date(Date.UTC(2026, 4, 28, 10, 0, index)).toISOString(),
+    });
+  }
+  const response = await request(`${DEMO_API}/admin/notifications`, {
+    headers: adminHeaders(),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.notifications.length, 100);
+  assert.equal(response.body.notifications[0].message, "Mensaje 104");
+  assert.equal(response.body.notifications.at(-1).message, "Mensaje 5");
+});
+
+test("GET admin notifications no permite acceder a otro negocio", async () => {
+  await createOtherBusiness();
+  const login = await loginAdmin("admin@otro.com", "otro123", "otro");
+  const response = await request(`${DEMO_API}/admin/notifications`, {
+    headers: {
+      Authorization: `Bearer ${login.body.token}`,
+    },
+  });
+
+  assert.equal(login.status, 200);
+  assert.equal(response.status, 403);
 });
 
 test("GET /api/businesses/demo/services devuelve solo servicios del negocio demo", async () => {
@@ -565,7 +699,36 @@ test("cancelar reserva cancela recordatorio pendiente y encola cancelacion", asy
   assert.equal(reminder.status, "cancelled");
   assert.equal(cancellation.status, "pending");
   assert.ok(cancellation.message.includes("Juan Cancelado"));
-  assert.ok(cancellation.message.includes("/demo"));
+  assert.ok(cancellation.message.includes("https://turno-simple-production.up.railway.app/demo"));
+  assert.equal(cancellation.message.includes("localhost:8080"), false);
+});
+
+test("booking_cancelled en PATCH status cancelado usa PUBLIC_BASE_URL", async () => {
+  const created = await createReservation({
+    customerName: "Juan Patch",
+    customerPhone: "3549504056",
+  });
+  assert.equal(created.status, 201);
+
+  const updated = await adminRequest(`${DEMO_API}/admin/reservations/${created.body.id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "cancelado" }),
+  });
+  assert.equal(updated.status, 200);
+
+  const cancellation = await withDb((db) => db.get(
+    `
+      SELECT message
+      FROM notifications
+      WHERE booking_id = ?
+        AND type = 'booking_cancelled'
+    `,
+    created.body.id,
+  ));
+
+  assert.ok(cancellation.message.includes("https://turno-simple-production.up.railway.app/demo"));
+  assert.equal(cancellation.message.includes("localhost:8080"), false);
 });
 
 test("un profesional de otro negocio no puede recibir reserva en demo", async () => {

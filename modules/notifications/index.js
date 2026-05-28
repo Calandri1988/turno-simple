@@ -3,6 +3,7 @@ const {
   configureNotificationsDatabase,
   enqueueNotification,
 } = require("./enqueue");
+const { getPublicBaseUrl } = require("./getPublicBaseUrl");
 const { normalizePhoneForWhatsApp } = require("./phone-utils");
 const { renderTemplate } = require("./templates");
 const {
@@ -20,6 +21,7 @@ module.exports = {
   cancelPendingReminder,
   configureNotifications,
   enqueueNotification,
+  getPublicBaseUrl,
   normalizePhoneForWhatsApp,
   processPendingNotifications,
   renderTemplate,
