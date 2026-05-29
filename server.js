@@ -2253,7 +2253,15 @@ app.post("/:slug/cancelar/:token", async (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.redirect("/demo");
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
+app.get("/privacidad", (req, res) => {
+  res.sendFile(path.join(__dirname, "privacidad.html"));
+});
+
+app.get("/terminos", (req, res) => {
+  res.sendFile(path.join(__dirname, "terminos.html"));
 });
 
 app.get("/:slug/admin/notifications", (req, res) => {

@@ -3,49 +3,130 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Turno Simple</title>
-    <link rel="stylesheet" href="styles.css" />
+    <meta
+      name="description"
+      content="Turno Simple es un sistema de turnos online para negocios con reservas, señas, recordatorios automáticos y cancelaciones controladas."
+    />
+    <title>Turno Simple - Sistema de turnos online para negocios</title>
+    <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
-    <main class="app-shell">
-      <section class="chat-card" aria-label="Reserva de turnos">
-        <header class="chat-header">
-          <div>
-            <p class="eyebrow">Reservas online</p>
-            <h1 id="business-name">Turno Simple</h1>
-            <p id="business-meta" class="business-meta"></p>
+  <body class="marketing-page">
+    <header class="marketing-header">
+      <a class="marketing-brand" href="/" aria-label="Turno Simple">Turno Simple</a>
+      <nav class="marketing-nav" aria-label="Navegacion principal">
+        <a href="#funciones">Funciones</a>
+        <a href="#como-funciona">Como funciona</a>
+        <a href="#contacto">Contacto</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="marketing-hero">
+        <div class="marketing-hero-copy">
+          <p class="eyebrow">Turno Simple</p>
+          <h1>Sistema de turnos online para negocios</h1>
+          <p>
+            Reservas online, señas, recordatorios automáticos y cancelaciones
+            controladas en una sola plataforma.
+          </p>
+          <div class="marketing-actions">
+            <a class="primary-button link-button" href="/demo">Probar demo</a>
+            <a class="secondary-button link-button" href="mailto:loesencial.app@gmail.com">Solicitar información</a>
           </div>
-          <span class="status">Disponible</span>
-        </header>
-
-        <div id="chat" class="chat-window" aria-live="polite"></div>
-
-        <footer class="chat-actions">
-          <div id="options" class="options" aria-label="Opciones de reserva"></div>
-          <button id="restart" class="secondary-button" type="button" hidden>
-            Reservar otro turno
-          </button>
-        </footer>
+        </div>
+        <aside class="marketing-preview" aria-label="Resumen de plataforma">
+          <div>
+            <span>Hoy</span>
+            <strong>Agenda ordenada</strong>
+            <small>Reservas confirmadas, señas pendientes y recordatorios en cola.</small>
+          </div>
+          <ul>
+            <li><span>09:00</span>Corte clásico confirmado</li>
+            <li><span>10:30</span>Coloración con seña pendiente</li>
+            <li><span>12:00</span>Recordatorio programado</li>
+          </ul>
+        </aside>
       </section>
 
-      <aside class="admin-panel" aria-label="Panel admin de turnos">
-        <header class="admin-header">
-          <div>
-            <p class="eyebrow">Admin simple</p>
-            <h2>Turnos reservados</h2>
-          </div>
-          <span id="admin-count" class="admin-count">0</span>
-        </header>
+      <section class="marketing-section" id="para-que-sirve">
+        <div class="section-heading">
+          <p class="eyebrow">Para qué sirve</p>
+          <h2>Una plataforma para recibir reservas online y administrar la agenda</h2>
+        </div>
+        <p class="section-copy">
+          Turno Simple permite a peluquerías, barberías, consultorios, centros
+          de estética y profesionales independientes recibir reservas desde un
+          link público, organizar horarios, pedir señas cuando corresponde y
+          gestionar cada turno desde un panel administrativo simple.
+        </p>
+      </section>
 
-        <div id="admin-list" class="admin-list" aria-live="polite"></div>
+      <section class="marketing-section" id="funciones">
+        <div class="section-heading">
+          <p class="eyebrow">Funciones</p>
+          <h2>Todo lo necesario para operar turnos sin perder conversaciones</h2>
+        </div>
+        <div class="feature-grid">
+          <article>Reservas online por link</article>
+          <article>Panel administrativo</article>
+          <article>Servicios con o sin seña</article>
+          <article>Confirmación manual de pagos</article>
+          <article>Recordatorios automáticos</article>
+          <article>Cancelación por link seguro</article>
+          <article>Multi negocio por slug</article>
+          <article>Notificaciones por WhatsApp</article>
+        </div>
+      </section>
 
-        <button id="clear-reservations" class="danger-button" type="button" disabled>
-          Borrar turnos de prueba
-        </button>
-      </aside>
+      <section class="marketing-section" id="como-funciona">
+        <div class="section-heading">
+          <p class="eyebrow">Cómo funciona</p>
+          <h2>Del link público al recordatorio, todo en un flujo claro</h2>
+        </div>
+        <ol class="steps-list">
+          <li><strong>1</strong><span>El negocio configura sus servicios.</span></li>
+          <li><strong>2</strong><span>El cliente reserva desde un link público.</span></li>
+          <li><strong>3</strong><span>El sistema solicita seña si corresponde.</span></li>
+          <li><strong>4</strong><span>El administrador confirma el pago.</span></li>
+          <li><strong>5</strong><span>El cliente recibe confirmaciones y recordatorios.</span></li>
+        </ol>
+      </section>
+
+      <section class="marketing-section" id="ideal-para">
+        <div class="section-heading">
+          <p class="eyebrow">Ideal para</p>
+          <h2>Negocios y profesionales que trabajan con agenda</h2>
+        </div>
+        <div class="audience-list">
+          <span>Peluquerías</span>
+          <span>Barberías</span>
+          <span>Consultorios</span>
+          <span>Profesionales independientes</span>
+          <span>Centros de estética</span>
+          <span>Servicios con agenda</span>
+        </div>
+      </section>
+
+      <section class="marketing-section contact-section" id="contacto">
+        <div>
+          <p class="eyebrow">Contacto</p>
+          <h2>Hablemos de tu sistema de turnos</h2>
+          <p>Email: <a href="mailto:loesencial.app@gmail.com">loesencial.app@gmail.com</a></p>
+          <p>Ubicación: Córdoba, Argentina</p>
+        </div>
+        <a class="primary-button link-button" href="mailto:loesencial.app@gmail.com">Solicitar información</a>
+      </section>
     </main>
 
-    <script src="whatsapp.js"></script>
-    <script src="app.js"></script>
+    <footer class="marketing-footer">
+      <strong>Turno Simple</strong>
+      <span>Sistema SaaS de gestión de turnos.</span>
+      <span>Contacto: <a href="mailto:loesencial.app@gmail.com">loesencial.app@gmail.com</a></span>
+      <nav aria-label="Legal">
+        <a href="/privacidad">Privacidad</a>
+        <a href="/terminos">Términos</a>
+      </nav>
+      <span>© 2026 Turno Simple</span>
+    </footer>
   </body>
 </html>
