@@ -421,6 +421,14 @@ test("GET /demo/admin/notifications carga vista admin de notificaciones", async 
   assert.ok(text.includes("admin-notifications-link"));
 });
 
+test("GET /admin/test-whatsapp responde error claro sin credenciales Meta", async () => {
+  const response = await request("/admin/test-whatsapp");
+
+  assert.equal(response.status, 500);
+  assert.equal(response.body.ok, false);
+  assert.match(response.body.error, /WHATSAPP_/);
+});
+
 test("GET /api/businesses/demo/admin/notifications sin token devuelve 401", async () => {
   const response = await request(`${DEMO_API}/admin/notifications`);
   assert.equal(response.status, 401);

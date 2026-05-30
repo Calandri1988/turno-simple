@@ -18,6 +18,7 @@ const {
   formatDate,
   subtractHours,
 } = require("./modules/notifications/date-utils");
+const { sendWhatsApp } = require("./services/whatsapp");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1844,6 +1845,24 @@ app.get("/api/businesses/:slug/admin/notifications", requireAdmin, async (req, r
   );
 
   res.json({ notifications: rows });
+});
+
+console.log("[routes] GET /admin/test-whatsapp registered");
+app.get("/admin/test-whatsapp", async (req, res) => {
+  try {
+    await sendWhatsApp({
+      to: "5493549558019",
+      template: "hello_world",
+      language: "en_US",
+      parameters: [],
+    });
+    res.json({ ok: true, message: "WhatsApp test sent" });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message || "No se pudo enviar WhatsApp de prueba.",
+    });
+  }
 });
 
 app.get("/api/businesses/:slug/admin/agenda", requireAdmin, async (req, res) => {

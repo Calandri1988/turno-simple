@@ -1,3 +1,6 @@
+const { sendWhatsApp } = require("../../services/whatsapp");
+const { formatDate } = require("./date-utils");
+
 let db;
 let workerInterval = null;
 let isWorkerStarted = false;
@@ -15,6 +18,111 @@ function requireDb() {
     throw new Error("Notifications database is not configured");
   }
   return db;
+}
+
+function isWhatsAppEnabled() {
+  return process.env.WHATSAPP_ENABLED === "true";
+}
+
+function extractCancelledFallbackParameters(message) {
+  const text = String(message || "");
+  const match = text.match(/Hola\s+(.+?)\.\s+Tu turno para\s+(.+?)\s+del\s+(\d{2}\/\d{2}\/\d{4})/is);
+  if (!match) {
+    return null;
+  }
+  return [match[1].trim(), match[2].trim(), match[3].trim()];
+}
+
+async function buildWhatsAppTemplatePayload(database, notification) {
+  const booking = notification.booking_id
+    ? await database.get(
+        `
+          SELECT
+            r.*,
+            b.payment_alias
+          FROM reservations r
+          JOIN businesses b ON b.id = r.business_id
+          WHERE r.id = ?
+            AND r.business_id = ?
+        `,
+        [notification.booking_id, notification.business_id],
+      )
+    : null;
+
+  if (!booking) {
+    if (notification.type === "booking_cancelled") {
+      const parameters = extractCancelledFallbackParameters(notification.message);
+      if (parameters) {
+        console.warn(`[notifications/worker] Using fallback template parameters for deleted booking id=${notification.booking_id}`);
+        return { template: notification.type, parameters };
+      }
+    }
+    throw new Error(`Cannot build WhatsApp template parameters for notification ${notification.id}`);
+  }
+
+  const date = formatDate(booking.date);
+
+  if (notification.type === "booking_payment_request") {
+    const service = await database.get(
+      "SELECT deposit_amount FROM services WHERE business_id = ? AND id = ?",
+      [booking.business_id, booking.service_id],
+    );
+    return {
+      template: notification.type,
+      parameters: [
+        booking.customer_name,
+        booking.service_name,
+        service?.deposit_amount || 0,
+        booking.payment_alias || "",
+      ],
+    };
+  }
+
+  if (
+    notification.type === "booking_confirmed" ||
+    notification.type === "booking_payment_confirmed" ||
+    notification.type === "booking_reminder_24h"
+  ) {
+    return {
+      template: notification.type,
+      parameters: [booking.customer_name, booking.service_name, date, booking.time],
+    };
+  }
+
+  if (notification.type === "booking_cancelled") {
+    return {
+      template: notification.type,
+      parameters: [booking.customer_name, booking.service_name, date],
+    };
+  }
+
+  return {
+    template: notification.type,
+    parameters: [],
+  };
+}
+
+async function deliverNotification(database, notification) {
+  const whatsappEnabled = process.env.WHATSAPP_ENABLED === "true";
+
+  if (!whatsappEnabled) {
+    console.log("[notifications/worker] SIMULATED [WHATSAPP_DISABLED]");
+    console.log(`  -> To: ${notification.recipient}`);
+    console.log(`  -> Type: ${notification.type}`);
+    console.log(`  -> Message: ${notification.message}`);
+    return;
+  }
+
+  console.log(`[notifications/worker] SEND [${notification.channel.toUpperCase()}]`);
+  console.log(`  -> To: ${notification.recipient}`);
+  console.log(`  -> Type: ${notification.type}`);
+
+  const payload = await buildWhatsAppTemplatePayload(database, notification);
+  await sendWhatsApp({
+    to: notification.recipient,
+    template: payload.template,
+    parameters: payload.parameters,
+  });
 }
 
 async function processPendingNotifications() {
@@ -41,10 +149,7 @@ async function processPendingNotifications() {
 
   for (const notification of pending) {
     try {
-      console.log(`[notifications/worker] SEND [${notification.channel.toUpperCase()}]`);
-      console.log(`  → To: ${notification.recipient}`);
-      console.log(`  → Type: ${notification.type}`);
-      console.log(`  → Message: ${notification.message}`);
+      await deliverNotification(database, notification);
 
       await database.run(
         `
@@ -94,7 +199,10 @@ function startWorker() {
 }
 
 module.exports = {
+  buildWhatsAppTemplatePayload,
   configureWorkerDatabase,
+  deliverNotification,
+  isWhatsAppEnabled,
   processPendingNotifications,
   startWorker,
 };
