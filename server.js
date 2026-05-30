@@ -2273,7 +2273,7 @@ app.post("/:slug/cancelar/:token", async (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.redirect(302, "/demo");
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
 app.get("/privacidad", (req, res) => {
