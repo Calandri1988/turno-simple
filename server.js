@@ -2219,13 +2219,13 @@ function renderCancelPage({ business, booking, type }) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${escapeHtml(title)} - ${escapeHtml(business?.name || "Turno Simple")}</title>
+    <title>${escapeHtml(title)} - ${escapeHtml(business?.name || "Momentia")}</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="app-shell cancel-page">
       <section class="success-screen">
-        <p>${escapeHtml(business?.name || "Turno Simple")}</p>
+        <p>${escapeHtml(business?.name || "Momentia")}</p>
         <h1>${escapeHtml(title)}</h1>
         <span>${escapeHtml(description)}</span>
         ${details}
@@ -2273,7 +2273,7 @@ app.post("/:slug/cancelar/:token", async (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.redirect(302, "/demo");
 });
 
 app.get("/privacidad", (req, res) => {
@@ -2300,7 +2300,7 @@ initDb()
   .then(() => {
     startWorker();
     app.listen(PORT, () => {
-      console.log(`Turno Simple listo en http://localhost:${PORT}`);
+      console.log(`Momentia listo en http://localhost:${PORT}`);
     });
   })
   .catch((error) => {

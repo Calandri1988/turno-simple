@@ -19,7 +19,7 @@ const schedules = [];
 const agenda = [];
 const allReservations = [];
 let token = localStorage.getItem(TOKEN_KEY) || "";
-let businessName = "Turno Simple";
+let businessName = "Momentia";
 let businessDetails = {
   whatsapp: "",
   address: "",
@@ -174,7 +174,7 @@ async function loadBusiness() {
   }
   const business = await response.json();
   const normalized = normalizeBusiness(business);
-  businessName = normalized.name || "Turno Simple";
+  businessName = normalized.name || "Momentia";
   businessDetails = normalized;
   businessNameElement.textContent = businessName;
   const meta = [normalized.category, normalized.city, normalized.address].filter(Boolean).join(" - ");

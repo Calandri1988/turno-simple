@@ -12,7 +12,7 @@ const BUSINESS_API_URL = `/api/businesses/${BUSINESS_SLUG}`;
 const weekdayLabels = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
 const services = [];
 const professionals = [];
-let businessName = "Turno Simple";
+let businessName = "Momentia";
 let businessPhone = "";
 let businessAddress = "";
 let businessPaymentAlias = "";
@@ -453,7 +453,7 @@ async function init() {
       return;
     }
     const business = await businessResponse.json();
-    businessName = business.name || "Turno Simple";
+    businessName = business.name || "Momentia";
     businessPhone = business.phone || business.whatsapp || "";
     businessAddress = business.address || "";
     businessPaymentAlias = business.paymentAlias || business.payment_alias || "";

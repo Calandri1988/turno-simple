@@ -31,7 +31,7 @@ let businessAvailable = true;
 
 const weekdayLabels = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
 const statusOptions = ["reservado", "confirmado", "cancelado", "asistio", "no_asistio"];
-let businessName = "Turno Simple";
+let businessName = "Momentia";
 const agendaFilters = {
   date: toIsoDate(new Date()),
   professionalId: "",
@@ -59,8 +59,8 @@ function resolveBusinessSlug() {
 
 function setBusiness(data) {
   business = data;
-  businessName = data.name || "Turno Simple";
-  document.title = `${businessName} - Turno Simple`;
+  businessName = data.name || "Momentia";
+  document.title = `${businessName} - Momentia`;
   businessNameElement.textContent = businessName;
   const details = [data.category, data.city].filter(Boolean).join(" - ");
   businessMetaElement.textContent = details;
