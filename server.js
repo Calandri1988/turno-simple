@@ -1850,8 +1850,9 @@ app.get("/api/businesses/:slug/admin/notifications", requireAdmin, async (req, r
 console.log("[routes] GET /admin/test-whatsapp registered");
 app.get("/admin/test-whatsapp", async (req, res) => {
   try {
+    console.log("[admin/test-whatsapp] to=54354915558019");
     await sendWhatsApp({
-      to: "5493549558019",
+      to: "54354915558019",
       template: "hello_world",
       language: "en_US",
       parameters: [],
