@@ -8,6 +8,12 @@ let isWorkerStarted = false;
 const POLL_INTERVAL_MS = 30_000;
 const BATCH_SIZE = 20;
 const MAX_ATTEMPTS = 3;
+const REAL_WHATSAPP_TEMPLATES = new Set([
+  "booking_confirmed",
+  "booking_payment_request",
+  "booking_payment_confirmed",
+  "booking_reminder_24h",
+]);
 
 function configureWorkerDatabase(database) {
   db = database;
@@ -39,6 +45,8 @@ async function buildWhatsAppTemplatePayload(database, notification) {
         `
           SELECT
             r.*,
+            b.name AS business_name,
+            b.address AS business_address,
             b.payment_alias
           FROM reservations r
           JOIN businesses b ON b.id = r.business_id
@@ -61,6 +69,7 @@ async function buildWhatsAppTemplatePayload(database, notification) {
   }
 
   const date = formatDate(booking.date);
+  const businessReference = booking.business_address || booking.business_name || "";
 
   if (notification.type === "booking_payment_request") {
     const service = await database.get(
@@ -80,9 +89,15 @@ async function buildWhatsAppTemplatePayload(database, notification) {
 
   if (
     notification.type === "booking_confirmed" ||
-    notification.type === "booking_payment_confirmed" ||
     notification.type === "booking_reminder_24h"
   ) {
+    return {
+      template: notification.type,
+      parameters: [booking.customer_name, booking.service_name, date, booking.time, businessReference],
+    };
+  }
+
+  if (notification.type === "booking_payment_confirmed") {
     return {
       template: notification.type,
       parameters: [booking.customer_name, booking.service_name, date, booking.time],
@@ -110,6 +125,11 @@ async function deliverNotification(database, notification) {
     console.log(`  -> To: ${notification.recipient}`);
     console.log(`  -> Type: ${notification.type}`);
     console.log(`  -> Message: ${notification.message}`);
+    return;
+  }
+
+  if (!REAL_WHATSAPP_TEMPLATES.has(notification.type)) {
+    console.log(`[notifications/worker] skipped real WhatsApp: template not approved (${notification.type})`);
     return;
   }
 

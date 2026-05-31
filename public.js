@@ -437,6 +437,18 @@ root.addEventListener("submit", async (event) => {
     form.querySelector("#form-error").hidden = false;
     return;
   }
+  if (typeof normalizePhone === "function") {
+    const phone = normalizePhone(state.customerPhone);
+    if (!phone.ok) {
+      const error = form.querySelector("#form-error");
+      error.hidden = false;
+      error.textContent = phone.error === "missing_area_code"
+        ? "Ingresá el número con código de área. Ejemplo: 3549432877."
+        : "Ingresá un WhatsApp válido.";
+      return;
+    }
+    state.customerPhone = phone.normalized;
+  }
 
   try {
     await confirmBooking();

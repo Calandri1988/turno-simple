@@ -1,14 +1,35 @@
-const GRAPH_VERSION = "v25.0";
 const DEFAULT_TIMEOUT_MS = 10000;
+const DEFAULT_GRAPH_VERSION = "v25.0";
+const DEFAULT_TEMPLATE_LANGUAGE = "es_AR";
+const { normalizePhone } = require("../whatsapp");
+
+function getGraphVersion() {
+  return process.env.WHATSAPP_API_VERSION || DEFAULT_GRAPH_VERSION;
+}
 
 function normalizeMetaPhone(phone) {
-  return String(phone ?? "").replace(/[^0-9]/g, "");
+  const result = normalizePhone(phone);
+  if (result.ok) {
+    console.log(`[whatsapp] phone normalize original=${result.original} normalized=${result.normalized} meta=${result.meta}`);
+    return result.meta;
+  }
+
+  console.warn(`[whatsapp] phone normalize failed original=${phone} error=${result.error}`);
+  return "";
+}
+
+function maskPhone(phone) {
+  const normalized = String(phone ?? "").replace(/[^0-9]/g, "");
+  if (normalized.length <= 5) {
+    return "***";
+  }
+  return `***${normalized.slice(-5)}`;
 }
 
 function buildWhatsAppTemplateBody({
   to,
   template,
-  language = process.env.WHATSAPP_TEMPLATE_LANGUAGE || "es",
+  language = process.env.WHATSAPP_TEMPLATE_LANGUAGE || DEFAULT_TEMPLATE_LANGUAGE,
   parameters = [],
 }) {
   const normalizedPhone = normalizeMetaPhone(to);
@@ -50,7 +71,7 @@ function buildWhatsAppTemplateBody({
 async function sendWhatsApp({
   to,
   template,
-  language = process.env.WHATSAPP_TEMPLATE_LANGUAGE || "es",
+  language = process.env.WHATSAPP_TEMPLATE_LANGUAGE || DEFAULT_TEMPLATE_LANGUAGE,
   parameters = [],
   timeoutMs = DEFAULT_TIMEOUT_MS,
   fetchImpl = globalThis.fetch,
@@ -59,9 +80,11 @@ async function sendWhatsApp({
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
 
   if (!phoneNumberId) {
+    console.warn("[whatsapp] skipped: missing WHATSAPP_PHONE_NUMBER_ID");
     throw new Error("WHATSAPP_PHONE_NUMBER_ID is not configured");
   }
   if (!accessToken) {
+    console.warn("[whatsapp] skipped: missing WHATSAPP_ACCESS_TOKEN");
     throw new Error("WHATSAPP_ACCESS_TOKEN is not configured");
   }
   if (typeof fetchImpl !== "function") {
@@ -76,9 +99,10 @@ async function sendWhatsApp({
   });
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
+  const url = `https://graph.facebook.com/${getGraphVersion()}/${phoneNumberId}/messages`;
 
   try {
+    console.log(`[whatsapp] sending template ${template} to ${maskPhone(normalizedPhone)}`);
     const response = await fetchImpl(url, {
       method: "POST",
       headers: {
@@ -102,7 +126,13 @@ async function sendWhatsApp({
       throw new Error(metaError.message || `WhatsApp API error ${response.status}`);
     }
 
-    console.log(`[whatsapp] Template sent: template=${template} | to=${normalizedPhone}`);
+    console.log("[whatsapp] Meta response", {
+      status: response.status,
+      template,
+      to: maskPhone(normalizedPhone),
+      messageId: data.messages?.[0]?.id,
+    });
+    console.log(`[whatsapp] sent ok message_id=${data.messages?.[0]?.id || "unknown"}`);
     return {
       ok: true,
       data,
@@ -122,6 +152,8 @@ async function sendWhatsApp({
 
 module.exports = {
   buildWhatsAppTemplateBody,
+  getGraphVersion,
+  maskPhone,
   normalizeMetaPhone,
   sendWhatsApp,
 };

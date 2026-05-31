@@ -1,15 +1,16 @@
-const { normalizeArgentinaWhatsapp } = require("../../whatsapp");
+const { normalizePhone } = require("../../whatsapp");
 
 function normalizePhoneForWhatsApp(phone) {
-  const normalized = normalizeArgentinaWhatsapp(phone, "3549");
-  if (normalized) {
-    return normalized;
+  const result = normalizePhone(phone);
+  if (result.ok) {
+    return result.normalized;
   }
 
-  console.warn(`[notifications] Could not normalize WhatsApp recipient: ${phone}`);
+  console.warn(`[notifications] Could not normalize WhatsApp recipient: ${phone} error=${result.error}`);
   return phone;
 }
 
 module.exports = {
+  normalizePhone,
   normalizePhoneForWhatsApp,
 };

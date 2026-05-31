@@ -19,6 +19,7 @@ const {
   subtractHours,
 } = require("./modules/notifications/date-utils");
 const { sendWhatsApp } = require("./services/whatsapp");
+const { normalizePhone } = require("./whatsapp");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -696,14 +697,14 @@ function mapSchedule(row) {
   };
 }
 
-async function enqueueBookingCreatedNotifications(business, booking) {
+async function enqueueBookingCreatedNotifications(business, booking, req) {
   if (booking.deposit_status === "pending") {
-    await enqueuePaymentRequestNotification(business, booking);
+    await enqueuePaymentRequestNotification(business, booking, req);
     return;
   }
 
-  await enqueueBookingConfirmedNotification(business, booking);
-  await enqueueBookingReminderNotification(business, booking);
+  await enqueueBookingConfirmedNotification(business, booking, req);
+  await enqueueBookingReminderNotification(business, booking, req);
 }
 
 function buildBookingPublicUrl(business, req) {
@@ -796,6 +797,7 @@ async function enqueueBookingReminderNotification(business, booking, req) {
   const reminder = renderTemplate("booking_reminder_24h", {
     client_name: booking.customer_name,
     service: booking.service_name,
+    date: formatDate(booking.date),
     time: booking.time,
     business_name: business.name,
     cancel_url: buildCancelUrl(business, booking, req),
@@ -810,6 +812,17 @@ async function enqueueBookingReminderNotification(business, booking, req) {
     message: reminder.message,
     scheduledFor: reminderDate,
   });
+}
+
+function buildApprovedTemplateTestParameters(template, business) {
+  const businessReference = business.address || business.name;
+  const samples = {
+    booking_confirmed: ["Cliente Prueba", "Corte clásico", "01/06/2026", "10:00", businessReference],
+    booking_payment_request: ["Cliente Prueba", "Coloración", "8000", business.payment_alias || "alias.demo.mp"],
+    booking_payment_confirmed: ["Cliente Prueba", "Coloración", "01/06/2026", "10:00"],
+    booking_reminder_24h: ["Cliente Prueba", "Corte clásico", "01/06/2026", "10:00", businessReference],
+  };
+  return samples[template] || null;
 }
 
 async function enqueueBookingCancelledNotification(business, booking, req) {
@@ -1852,6 +1865,50 @@ app.get("/api/businesses/:slug/admin/notifications", requireAdmin, async (req, r
   res.json({ notifications: rows });
 });
 
+app.post("/api/businesses/:slug/admin/test-whatsapp-template", requireAdmin, async (req, res) => {
+  const business = await getBusinessOr404(req, res);
+  if (!business) return;
+
+  const to = cleanText(req.body.to);
+  const template = cleanText(req.body.template);
+  const parameters = buildApprovedTemplateTestParameters(template, business);
+  const normalizedTo = normalizePhone(to);
+
+  if (!to || !parameters || !normalizedTo.ok) {
+    res.status(400).json({
+      error: !normalizedTo.ok
+        ? "Ingresá el número con código de área. Ejemplo: 3549432877."
+        : "Indica un telefono y una plantilla aprobada.",
+      allowedTemplates: [
+        "booking_confirmed",
+        "booking_payment_request",
+        "booking_payment_confirmed",
+        "booking_reminder_24h",
+      ],
+    });
+    return;
+  }
+
+  try {
+    const result = await sendWhatsApp({
+      to: normalizedTo.normalized,
+      template,
+      parameters,
+    });
+    res.json({
+      ok: true,
+      template,
+      to: result.to,
+      messageId: result.data?.messages?.[0]?.id || null,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message || "No se pudo enviar la plantilla de prueba.",
+    });
+  }
+});
+
 console.log("[routes] GET /admin/test-whatsapp registered");
 app.get("/admin/test-whatsapp", async (req, res) => {
   try {
@@ -2024,6 +2081,18 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
     return;
   }
 
+  const normalizedCustomerPhone = normalizePhone(reservation.customerPhone);
+  if (!normalizedCustomerPhone.ok) {
+    res.status(400).json({
+      error: normalizedCustomerPhone.error === "missing_area_code"
+        ? "Ingresá el número con código de área. Ejemplo: 3549432877."
+        : "Ingresá un WhatsApp válido.",
+      code: normalizedCustomerPhone.error,
+    });
+    return;
+  }
+  reservation.customerPhone = normalizedCustomerPhone.normalized;
+
   if (!professionalId.valid) {
     res.status(400).json({ error: "Profesional invalido." });
     return;
@@ -2119,7 +2188,7 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
     const row = await db.get("SELECT * FROM reservations WHERE id = ?", result.lastID);
     await db.exec("COMMIT");
     transactionStarted = false;
-    await enqueueBookingCreatedNotifications(business, row);
+    await enqueueBookingCreatedNotifications(business, row, req);
     res.status(201).json(mapReservation(row));
   } catch (error) {
     if (transactionStarted) {

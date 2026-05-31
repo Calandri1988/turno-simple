@@ -12,54 +12,83 @@
     return value;
   }
 
-  function cleanNationalNumber(value, defaultAreaCode) {
-    let national = value.replace(/^0+/, "");
-    if (national.startsWith(`${defaultAreaCode}15`)) {
-      national = `${defaultAreaCode}${national.slice(defaultAreaCode.length + 2)}`;
-    }
-    if (national.startsWith("15")) {
-      national = national.slice(2);
-    }
-    if (national.length <= 8 && defaultAreaCode) {
-      national = `${defaultAreaCode}${national}`;
+  function removeMobilePrefixAfterAreaCode(national) {
+    for (const areaLength of [4, 3, 2]) {
+      const area = national.slice(0, areaLength);
+      const rest = national.slice(areaLength);
+      if (/^\d+$/.test(area) && rest.startsWith("15") && rest.length >= 8) {
+        return `${area}${rest.slice(2)}`;
+      }
     }
     return national;
   }
 
-  function normalizeArgentinaWhatsapp(phone, defaultAreaCode = "3549") {
-    let digits = stripInternationalNoise(onlyDigits(phone));
-    const areaCode = onlyDigits(defaultAreaCode);
+  function toMetaPhone(normalized) {
+    if (root?.process?.env?.WHATSAPP_USE_ARGENTINA_TEST_FORMAT === "true" && normalized.startsWith("549")) {
+      return `54${normalized.slice(3)}`;
+    }
+    return normalized;
+  }
 
-    if (!digits) return "";
+  function normalizePhone(phone) {
+    const original = String(phone ?? "");
+    let digits = stripInternationalNoise(onlyDigits(original));
+    const fail = (error) => ({
+      ok: false,
+      original,
+      normalized: null,
+      meta: null,
+      error,
+    });
 
-    let national = "";
+    if (!digits) return fail("empty");
+
+    let national;
     if (digits.startsWith("549")) {
       national = digits.slice(3);
     } else if (digits.startsWith("54")) {
       national = digits.slice(2);
       if (national.startsWith("9")) national = national.slice(1);
     } else {
-      national = digits;
+      national = digits.replace(/^0+/, "");
     }
 
-    national = cleanNationalNumber(national, areaCode);
+    national = national.replace(/^0+/, "");
+    if (national.startsWith("15")) {
+      console.warn(`[phone] rejected ambiguous local mobile number: original=${original} reason=missing_area_code`);
+      return fail("missing_area_code");
+    }
+
+    national = removeMobilePrefixAfterAreaCode(national);
     const normalized = `549${national}`;
 
-    if (!/^549\d{8,12}$/.test(normalized)) return "";
-    return normalized;
+    if (!/^549\d{8,12}$/.test(normalized)) return fail("invalid_phone");
+    return {
+      ok: true,
+      original,
+      normalized,
+      meta: toMetaPhone(normalized),
+      error: null,
+    };
   }
 
-  function buildWhatsappLink(phone, message = "", defaultAreaCode = "3549") {
-    const normalized = normalizeArgentinaWhatsapp(phone, defaultAreaCode);
+  function normalizeArgentinaWhatsapp(phone) {
+    const result = normalizePhone(phone);
+    return result.ok ? result.normalized : "";
+  }
+
+  function buildWhatsappLink(phone, message = "") {
+    const normalized = normalizeArgentinaWhatsapp(phone);
     if (!normalized) return "";
     const text = message ? `?text=${encodeURIComponent(message)}` : "";
     return `https://wa.me/${normalized}${text}`;
   }
 
+  root.normalizePhone = normalizePhone;
   root.normalizeArgentinaWhatsapp = normalizeArgentinaWhatsapp;
   root.buildWhatsappLink = buildWhatsappLink;
 
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { normalizeArgentinaWhatsapp, buildWhatsappLink };
+    module.exports = { normalizePhone, normalizeArgentinaWhatsapp, buildWhatsappLink };
   }
 })(typeof globalThis !== "undefined" ? globalThis : window);

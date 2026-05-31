@@ -175,7 +175,7 @@ async function createOtherReservation() {
     date: "2026-06-08",
     time: "09:00",
     customerName: "Otro Cliente",
-    customerPhone: "222",
+    customerPhone: "3549432877",
   });
 }
 
@@ -186,7 +186,7 @@ function reservation(overrides = {}) {
     date: "2026-06-08",
     time: "09:00",
     customerName: "Cliente Test",
-    customerPhone: "111",
+    customerPhone: "3549504056",
     ...overrides,
   };
 }
@@ -434,6 +434,19 @@ test("GET /api/businesses/demo/admin/notifications sin token devuelve 401", asyn
   assert.equal(response.status, 401);
 });
 
+test("POST test whatsapp template requiere JWT admin", async () => {
+  const response = await request(`${DEMO_API}/admin/test-whatsapp-template`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      to: "5493549432877",
+      template: "booking_confirmed",
+    }),
+  });
+
+  assert.equal(response.status, 401);
+});
+
 test("GET /api/businesses/demo/admin/notifications con token valido devuelve 200", async () => {
   await insertNotification("demo", { message: "Mensaje de diagnostico demo" });
   const response = await request(`${DEMO_API}/admin/notifications`, {
@@ -612,6 +625,14 @@ test("fecha invalida rechaza 400", async () => {
 test("horario invalido rechaza 400", async () => {
   const response = await createReservation({ time: "9:00" });
   assert.equal(response.status, 400);
+});
+
+test("telefono local ambiguo con 15 rechaza 400", async () => {
+  const response = await createReservation({ customerPhone: "15-432877" });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.code, "missing_area_code");
+  assert.match(response.body.error, /código de área/);
 });
 
 test("reserva valida con profesional especifico acepta 201", async () => {
