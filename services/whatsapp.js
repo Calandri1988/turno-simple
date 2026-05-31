@@ -7,8 +7,8 @@ function getGraphVersion() {
   return process.env.WHATSAPP_API_VERSION || DEFAULT_GRAPH_VERSION;
 }
 
-function normalizeMetaPhone(phone) {
-  const result = normalizePhone(phone);
+function normalizeMetaPhone(phone, options = {}) {
+  const result = normalizePhone(phone, options);
   if (result.ok) {
     console.log(`[whatsapp] phone normalize original=${result.original} normalized=${result.normalized} meta=${result.meta}`);
     return result.meta;
@@ -31,8 +31,9 @@ function buildWhatsAppTemplateBody({
   template,
   language = process.env.WHATSAPP_TEMPLATE_LANGUAGE || DEFAULT_TEMPLATE_LANGUAGE,
   parameters = [],
+  useArgentinaTestFormat,
 }) {
-  const normalizedPhone = normalizeMetaPhone(to);
+  const normalizedPhone = normalizeMetaPhone(to, { useArgentinaTestFormat });
 
   if (!normalizedPhone) {
     throw new Error("WhatsApp destination phone is required");
@@ -73,6 +74,7 @@ async function sendWhatsApp({
   template,
   language = process.env.WHATSAPP_TEMPLATE_LANGUAGE || DEFAULT_TEMPLATE_LANGUAGE,
   parameters = [],
+  useArgentinaTestFormat,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   fetchImpl = globalThis.fetch,
 }) {
@@ -96,6 +98,7 @@ async function sendWhatsApp({
     template,
     language,
     parameters,
+    useArgentinaTestFormat,
   });
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);

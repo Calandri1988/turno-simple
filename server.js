@@ -1911,15 +1911,52 @@ app.post("/api/businesses/:slug/admin/test-whatsapp-template", requireAdmin, asy
 
 console.log("[routes] GET /admin/test-whatsapp registered");
 app.get("/admin/test-whatsapp", async (req, res) => {
+  const to = cleanText(req.query.to).replace(/[^0-9]/g, "") || "54354915558019";
+  const template = "hello_world";
+  const language = "en_US";
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const version = process.env.WHATSAPP_API_VERSION || "v25.0";
+
+  if (!phoneNumberId) {
+    res.status(500).json({ ok: false, error: "WHATSAPP_PHONE_NUMBER_ID is not configured" });
+    return;
+  }
+  if (!accessToken) {
+    res.status(500).json({ ok: false, error: "WHATSAPP_ACCESS_TOKEN is not configured" });
+    return;
+  }
+
   try {
-    console.log("[admin/test-whatsapp] to=54354915558019");
-    await sendWhatsApp({
-      to: "54354915558019",
-      template: "hello_world",
-      language: "en_US",
-      parameters: [],
+    console.log(`[admin/test-whatsapp] template=${template} language=${language} to=${to}`);
+    const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: {
+          name: template,
+          language: { code: language },
+        },
+      }),
     });
-    res.json({ ok: true, message: "WhatsApp test sent" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error?.message || `WhatsApp API error ${response.status}`);
+    }
+    res.json({
+      ok: true,
+      message: "WhatsApp hello_world test sent",
+      template,
+      language,
+      to,
+      messageId: data.messages?.[0]?.id || null,
+    });
   } catch (error) {
     res.status(500).json({
       ok: false,

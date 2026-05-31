@@ -23,14 +23,15 @@
     return national;
   }
 
-  function toMetaPhone(normalized) {
-    if (root?.process?.env?.WHATSAPP_USE_ARGENTINA_TEST_FORMAT === "true" && normalized.startsWith("549")) {
+  function toMetaPhone(normalized, options = {}) {
+    const useArgentinaTestFormat = options.useArgentinaTestFormat ?? root?.process?.env?.WHATSAPP_USE_ARGENTINA_TEST_FORMAT === "true";
+    if (useArgentinaTestFormat && normalized.startsWith("549")) {
       return `54${normalized.slice(3)}`;
     }
     return normalized;
   }
 
-  function normalizePhone(phone) {
+  function normalizePhone(phone, options = {}) {
     const original = String(phone ?? "");
     let digits = stripInternationalNoise(onlyDigits(original));
     const fail = (error) => ({
@@ -67,7 +68,7 @@
       ok: true,
       original,
       normalized,
-      meta: toMetaPhone(normalized),
+      meta: toMetaPhone(normalized, options),
       error: null,
     };
   }

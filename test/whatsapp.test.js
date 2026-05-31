@@ -42,6 +42,17 @@ test("meta usa formato sin 9 cuando WHATSAPP_USE_ARGENTINA_TEST_FORMAT=true", ()
   delete process.env.WHATSAPP_USE_ARGENTINA_TEST_FORMAT;
 });
 
+test("meta puede forzar formato de prueba argentino por llamada", () => {
+  process.env.WHATSAPP_USE_ARGENTINA_TEST_FORMAT = "false";
+
+  const result = normalizePhone("54354915558019", { useArgentinaTestFormat: true });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.normalized, "5493549558019");
+  assert.equal(result.meta, "543549558019");
+  delete process.env.WHATSAPP_USE_ARGENTINA_TEST_FORMAT;
+});
+
 test("meta usa formato interno cuando WHATSAPP_USE_ARGENTINA_TEST_FORMAT=false", () => {
   process.env.WHATSAPP_USE_ARGENTINA_TEST_FORMAT = "false";
 
