@@ -29,9 +29,10 @@ const depositStatuses = new Set(["none", "pending", "paid"]);
 const adminRoles = new Set(["owner", "staff"]);
 
 const servicesSeed = [
-  { id: "consulta", name: "Consulta", durationMinutes: 30, price: null },
-  { id: "corte", name: "Corte", durationMinutes: 45, price: null },
-  { id: "asesoria", name: "Asesoria", durationMinutes: 60, price: null },
+  { id: "consulta", name: "Perfilado de barba", durationMinutes: 30, price: 8000, requiresDeposit: 0, depositAmount: 0 },
+  { id: "corte", name: "Corte clásico", durationMinutes: 45, price: 12000, requiresDeposit: 0, depositAmount: 0 },
+  { id: "asesoria", name: "Corte + barba", durationMinutes: 60, price: 16000, requiresDeposit: 0, depositAmount: 0 },
+  { id: "coloracion", name: "Coloración", durationMinutes: 90, price: 28000, requiresDeposit: 1, depositAmount: 8000 },
 ];
 
 const professionalsSeed = [
@@ -52,7 +53,7 @@ const professionalsSeed = [
     ],
   },
   {
-    name: "Clara Gomez",
+    name: "Clara Gómez",
     schedules: [
       { weekday: 1, startTime: "12:00", endTime: "20:00", intervalMinutes: 90 },
       { weekday: 5, startTime: "10:00", endTime: "19:00", intervalMinutes: 90 },
@@ -407,15 +408,19 @@ async function seedServices(businessId) {
           business_id,
           name,
           duration_minutes,
-          price
+          price,
+          requires_deposit,
+          deposit_amount
         )
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(business_id, id) DO UPDATE SET
           name = excluded.name,
           duration_minutes = excluded.duration_minutes,
-          price = excluded.price
+          price = excluded.price,
+          requires_deposit = excluded.requires_deposit,
+          deposit_amount = excluded.deposit_amount
       `,
-      [service.id, businessId, service.name, service.durationMinutes, service.price],
+      [service.id, businessId, service.name, service.durationMinutes, service.price, service.requiresDeposit, service.depositAmount],
     );
   }
 }

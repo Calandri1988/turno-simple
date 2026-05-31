@@ -291,12 +291,14 @@ function renderSuccess() {
     progress.innerHTML = "";
     root.innerHTML = `
       <div class="success-screen">
-        <p>Pendiente</p>
-        <h2>Tu turno quedo pendiente de confirmacion</h2>
-        <span>Para confirmarlo, envia el comprobante al negocio.</span>
+        <p>Reserva recibida</p>
+        <h2>✓ Tu turno quedó pendiente de seña</h2>
+        <span>Te esperamos en ${escapeHtml(businessName)}. Para confirmarlo, enviá el comprobante al negocio.</span>
         <div class="summary-box">
           <strong>${escapeHtml(state.service.name)}</strong>
-          <span>${escapeHtml(state.assignedProfessionalName)} - ${escapeHtml(state.date.label)} ${escapeHtml(state.time)}</span>
+          <span>Profesional: ${escapeHtml(state.assignedProfessionalName)}</span>
+          <span>Fecha: ${escapeHtml(state.date.label)}</span>
+          <span>Horario: ${escapeHtml(state.time)}</span>
           <span>Seña: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
           ${paymentInstructions ? `<span>${escapeHtml(paymentInstructions)}</span>` : ""}
         </div>
@@ -312,13 +314,16 @@ function renderSuccess() {
   root.innerHTML = `
     <div class="success-screen">
       <p>Listo</p>
-      <h2>Tu turno quedo reservado</h2>
+      <h2>✓ Tu turno fue reservado correctamente</h2>
       <span>Te esperamos en ${escapeHtml(businessName)}.</span>
       <div class="summary-box">
         <strong>${escapeHtml(state.service.name)}</strong>
-        <span>${escapeHtml(state.assignedProfessionalName)} - ${escapeHtml(state.date.label)} ${escapeHtml(state.time)}</span>
+        <span>Profesional: ${escapeHtml(state.assignedProfessionalName)}</span>
+        <span>Fecha: ${escapeHtml(state.date.label)}</span>
+        <span>Horario: ${escapeHtml(state.time)}</span>
         <span>${escapeHtml(state.customerName)} - ${escapeHtml(state.customerPhone)}</span>
       </div>
+      <span>Si necesitás modificar o cancelar tu turno podés comunicarte con nosotros por WhatsApp.</span>
       ${state.cancelUrl ? `<a class="text-button link-button" href="${escapeHtml(state.cancelUrl)}">Cancelar turno</a>` : ""}
       <button class="primary-button" type="button" data-restart>Reservar otro turno</button>
     </div>

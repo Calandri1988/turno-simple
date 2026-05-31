@@ -650,6 +650,31 @@ h2 {
   color: #9a4b05;
 }
 
+.badge-warning {
+  background: #fff4e8;
+  color: #9a4b05;
+}
+
+.badge-success {
+  background: #e9f8f0;
+  color: #17613f;
+}
+
+.badge-danger {
+  background: #fdecec;
+  color: #9f1d1d;
+}
+
+.badge-info {
+  background: #e8f2ff;
+  color: #15579d;
+}
+
+.badge-secondary {
+  background: #eef2f7;
+  color: #475467;
+}
+
 .status-confirmado,
 .status-asistio {
   background: #e9f8f0;
@@ -1667,7 +1692,7 @@ body {
 .status-badge {
   min-height: 26px;
   margin-left: 0;
-  text-transform: capitalize;
+  text-transform: none;
 }
 
 .notifications-panel {

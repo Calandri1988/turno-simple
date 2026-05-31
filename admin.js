@@ -247,6 +247,38 @@ function renderAgendaSections() {
   updateFreshnessText();
 }
 
+function setReservationState(id, status, depositStatus = null) {
+  const reservationId = Number(id);
+  for (const collection of [agenda, allReservations]) {
+    const reservation = collection.find((item) => item.id === reservationId);
+    if (reservation) {
+      reservation.status = status;
+      if (depositStatus) reservation.depositStatus = depositStatus;
+    }
+  }
+}
+
+function updateReservationCard(id, status, depositStatus = null) {
+  const cards = root.querySelectorAll(`[data-booking-id="${id}"]`);
+  if (cards.length === 0) return;
+
+  for (const card of cards) {
+    const badge = card.querySelector(".booking-status-badge");
+    if (badge) {
+      badge.textContent = getStatusLabel(status);
+      badge.className = `status-badge booking-status-badge ${getStatusClass(status)} status-${status}`;
+    }
+
+    const select = card.querySelector(".status-select");
+    if (select) select.value = status;
+
+    if (depositStatus === "paid") {
+      const confirmBtn = card.querySelector(".btn-confirm-payment");
+      if (confirmBtn) confirmBtn.hidden = true;
+    }
+  }
+}
+
 async function refreshReservationsOnly({ showNewNotice = false } = {}) {
   const before = new Set(knownReservationIds);
   await loadReservationData();
@@ -335,16 +367,40 @@ function renderLogin() {
   `;
 }
 
+function getStatusLabel(status) {
+  const labels = {
+    pendiente_pago: "Pendiente de seña",
+    pendiente: "Pendiente de seña",
+    confirmado: "Confirmado",
+    cancelado: "Cancelado",
+    asistio: "Asistió",
+    no_asistio: "No asistió",
+    reservado: "Reservado",
+  };
+  return labels[status] || status;
+}
+
+function getStatusClass(status) {
+  const classes = {
+    pendiente_pago: "badge-warning",
+    pendiente: "badge-warning",
+    confirmado: "badge-success",
+    cancelado: "badge-danger",
+    reservado: "badge-info",
+  };
+  return classes[status] || "badge-secondary";
+}
+
 function statusSelect(reservation) {
   return `
-    <select data-action="status" data-id="${reservation.id}">
-      ${statusOptions.map((status) => `<option value="${status}" ${status === reservation.status ? "selected" : ""}>${status}</option>`).join("")}
+    <select class="status-select" data-action="status" data-id="${reservation.id}">
+      ${statusOptions.map((status) => `<option value="${status}" ${status === reservation.status ? "selected" : ""}>${escapeHtml(getStatusLabel(status))}</option>`).join("")}
     </select>
   `;
 }
 
 function statusBadge(status) {
-  return `<span class="status-badge status-${escapeHtml(status)}">${escapeHtml(status)}</span>`;
+  return `<span class="status-badge booking-status-badge ${escapeHtml(getStatusClass(status))} status-${escapeHtml(status)}">${escapeHtml(getStatusLabel(status))}</span>`;
 }
 
 function renderAgendaList(items, emptyText) {
@@ -352,14 +408,14 @@ function renderAgendaList(items, emptyText) {
     return `<div class="admin-empty"><strong>${escapeHtml(emptyText)}</strong></div>`;
   }
   return items.map((reservation) => `
-    <article class="agenda-row">
+    <article class="agenda-row" data-booking-id="${reservation.id}">
       <div>
         <strong>${escapeHtml(reservation.time)} - ${escapeHtml(reservation.customerName)} ${statusBadge(reservation.status)}</strong>
         <span>${escapeHtml(reservation.serviceName)} con ${escapeHtml(reservation.professionalName)}</span>
         <small>${escapeHtml(formatDateLabel(reservation.date))} - ${escapeHtml(reservation.customerPhone)}</small>
       </div>
       ${statusSelect(reservation)}
-      ${reservation.depositStatus === "pending" ? `<button class="secondary-button" type="button" data-action="confirm-deposit" data-id="${reservation.id}">✓ Seña recibida / Confirmar turno</button>` : ""}
+      ${reservation.depositStatus === "pending" ? `<button class="secondary-button btn-confirm-payment" type="button" data-action="confirm-deposit" data-id="${reservation.id}">✓ Seña recibida / Confirmar turno</button>` : ""}
       <button class="secondary-button" type="button" data-action="whatsapp" data-id="${reservation.id}">WhatsApp</button>
       <button class="danger-button" type="button" data-action="cancel-status" data-id="${reservation.id}">Cancelar</button>
     </article>
@@ -707,8 +763,10 @@ root.addEventListener("submit", async (event) => {
 root.addEventListener("change", async (event) => {
   const select = event.target.closest("[data-action='status']");
   if (!select) return;
-  await sendJson(`${BUSINESS_API_URL}/admin/reservations/${select.dataset.id}/status`, "PATCH", { status: select.value });
-  await refreshReservationsOnly();
+  const updated = await sendJson(`${BUSINESS_API_URL}/admin/reservations/${select.dataset.id}/status`, "PATCH", { status: select.value });
+  const status = updated?.status || select.value;
+  setReservationState(select.dataset.id, status, updated?.depositStatus);
+  updateReservationCard(select.dataset.id, status, updated?.depositStatus);
 });
 
 root.addEventListener("input", (event) => {
@@ -770,9 +828,14 @@ root.addEventListener("click", async (event) => {
     return;
   }
   if (action === "confirm-deposit") {
-    await sendJson(`${BUSINESS_API_URL}/admin/bookings/${id}/confirm-payment`, "POST", {});
-    window.alert("Seña confirmada. Turno confirmado.");
-    await refreshReservationsOnly();
+    const updated = await sendJson(`${BUSINESS_API_URL}/admin/bookings/${id}/confirm-payment`, "POST", {});
+    setReservationState(id, updated?.status || "confirmado", updated?.depositStatus || "paid");
+    updateReservationCard(id, updated?.status || "confirmado", updated?.depositStatus || "paid");
+    const notice = root.querySelector("[data-admin-notice]");
+    if (notice) {
+      notice.textContent = "Seña confirmada. Turno confirmado.";
+      notice.hidden = false;
+    }
     return;
   }
 

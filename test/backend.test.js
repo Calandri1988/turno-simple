@@ -172,7 +172,7 @@ async function createOtherReservation() {
     slug: "otro",
     serviceId: "consulta",
     professionalId: null,
-    date: "2026-06-01",
+    date: "2026-06-08",
     time: "09:00",
     customerName: "Otro Cliente",
     customerPhone: "222",
@@ -183,7 +183,7 @@ function reservation(overrides = {}) {
   return {
     serviceId: "consulta",
     professionalId: 1,
-    date: "2026-06-01",
+    date: "2026-06-08",
     time: "09:00",
     customerName: "Cliente Test",
     customerPhone: "111",
@@ -518,7 +518,7 @@ test("GET /api/businesses/demo/services devuelve solo servicios del negocio demo
   assert.ok(Array.isArray(response.body));
   assert.deepEqual(
     response.body.map((service) => service.id).sort(),
-    ["asesoria", "consulta", "corte"],
+    ["asesoria", "coloracion", "consulta", "corte"],
   );
   assert.ok(!response.body.some((service) => service.id === "otro"));
 });
@@ -623,7 +623,7 @@ test("reserva valida con profesional especifico acepta 201", async () => {
 
   assert.equal(response.status, 201);
   assert.equal(response.body.professionalId, 1);
-  assert.equal(response.body.date, "2026-06-01");
+  assert.equal(response.body.date, "2026-06-08");
   assert.equal(response.body.durationMinutes, 60);
 });
 
@@ -938,6 +938,9 @@ test("Cualquiera disponible asigna profesional libre", async () => {
 
 test("Cualquiera disponible solo asigna profesionales del mismo negocio", async () => {
   await createOtherBusiness();
+  await withDb((db) => db.run(
+    "DELETE FROM professional_schedules WHERE business_id = 1 AND weekday = 0",
+  ));
   const demo = await createReservation({
     serviceId: "consulta",
     professionalId: null,
