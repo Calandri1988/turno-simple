@@ -23,10 +23,19 @@
     return national;
   }
 
+  function inferArgentinaAreaCodeLength(national) {
+    if (national.startsWith("11")) return 2;
+    if (national.startsWith("351")) return 3;
+    if (national.startsWith("3549")) return 4;
+    return 4;
+  }
+
   function toMetaPhone(normalized, options = {}) {
     const useArgentinaTestFormat = options.useArgentinaTestFormat ?? root?.process?.env?.WHATSAPP_USE_ARGENTINA_TEST_FORMAT === "true";
     if (useArgentinaTestFormat && normalized.startsWith("549")) {
-      return `54${normalized.slice(3)}`;
+      const national = normalized.slice(3);
+      const areaCodeLength = inferArgentinaAreaCodeLength(national);
+      return `54${national.slice(0, areaCodeLength)}15${national.slice(areaCodeLength)}`;
     }
     return normalized;
   }

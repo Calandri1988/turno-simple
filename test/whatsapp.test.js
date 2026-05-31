@@ -38,7 +38,7 @@ test("meta usa formato sin 9 cuando WHATSAPP_USE_ARGENTINA_TEST_FORMAT=true", ()
 
   assert.equal(result.ok, true);
   assert.equal(result.normalized, "5493549432877");
-  assert.equal(result.meta, "543549432877");
+  assert.equal(result.meta, "54354915432877");
   delete process.env.WHATSAPP_USE_ARGENTINA_TEST_FORMAT;
 });
 
@@ -49,7 +49,7 @@ test("meta puede forzar formato de prueba argentino por llamada", () => {
 
   assert.equal(result.ok, true);
   assert.equal(result.normalized, "5493549558019");
-  assert.equal(result.meta, "543549558019");
+  assert.equal(result.meta, "54354915558019");
   delete process.env.WHATSAPP_USE_ARGENTINA_TEST_FORMAT;
 });
 
