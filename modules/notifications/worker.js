@@ -13,6 +13,7 @@ const REAL_WHATSAPP_TEMPLATES = new Set([
   "booking_payment_request",
   "booking_payment_confirmed",
   "booking_reminder_24h",
+  "booking_cancelled",
 ]);
 
 function configureWorkerDatabase(database) {
