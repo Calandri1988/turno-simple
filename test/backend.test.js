@@ -336,9 +336,9 @@ test("GET /api/businesses/demo devuelve 200", async () => {
   assert.equal(response.body.name, "Barbería Central");
   assert.equal(response.body.category, "Barbería");
   assert.equal(response.body.city, "Cruz del Eje");
-  assert.equal(response.body.whatsapp, "");
-  assert.equal(response.body.address, "");
-  assert.equal(response.body.paymentAlias, "");
+  assert.equal(response.body.whatsapp, "3549432877");
+  assert.equal(response.body.address, "Centro - Cruz del Eje");
+  assert.equal(response.body.paymentAlias, "barberia.central.mp");
 });
 
 test("GET /api/businesses/slug-inexistente devuelve 404", async () => {
@@ -347,24 +347,37 @@ test("GET /api/businesses/slug-inexistente devuelve 404", async () => {
 });
 
 test("actualizar datos del negocio desde admin se refleja en negocio publico", async () => {
-  const updated = await adminRequest(`${DEMO_API}/admin/business`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      whatsapp: "351 555-1234",
-      address: "San Martin 123",
-      paymentAlias: "turno.demo.mp",
-    }),
-  });
-  const publicBusiness = await request(`${DEMO_API}`);
+  try {
+    const updated = await adminRequest(`${DEMO_API}/admin/business`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        whatsapp: "351 555-1234",
+        address: "San Martin 123",
+        paymentAlias: "turno.demo.mp",
+      }),
+    });
+    const publicBusiness = await request(`${DEMO_API}`);
 
-  assert.equal(updated.status, 200);
-  assert.equal(updated.body.whatsapp, "351 555-1234");
-  assert.equal(updated.body.address, "San Martin 123");
-  assert.equal(updated.body.paymentAlias, "turno.demo.mp");
-  assert.equal(publicBusiness.body.whatsapp, "351 555-1234");
-  assert.equal(publicBusiness.body.address, "San Martin 123");
-  assert.equal(publicBusiness.body.paymentAlias, "turno.demo.mp");
+    assert.equal(updated.status, 200);
+    assert.equal(updated.body.whatsapp, "351 555-1234");
+    assert.equal(updated.body.address, "San Martin 123");
+    assert.equal(updated.body.paymentAlias, "turno.demo.mp");
+    assert.equal(publicBusiness.body.whatsapp, "351 555-1234");
+    assert.equal(publicBusiness.body.address, "San Martin 123");
+    assert.equal(publicBusiness.body.paymentAlias, "turno.demo.mp");
+  } finally {
+    await withDb((db) => db.run(
+      `
+        UPDATE businesses
+        SET whatsapp = ?, address = ?, payment_alias = ?
+        WHERE slug = 'demo'
+      `,
+      "3549432877",
+      "Centro - Cruz del Eje",
+      "barberia.central.mp",
+    ));
+  }
 });
 
 test("usuario de otro negocio no puede actualizar datos ajenos", async () => {
@@ -798,7 +811,8 @@ test("cancelar reserva cancela recordatorio pendiente y encola cancelacion", asy
   assert.equal(reminder.status, "cancelled");
   assert.equal(cancellation.status, "pending");
   assert.ok(cancellation.message.includes("Juan Cancelado"));
-  assert.ok(cancellation.message.includes("https://turno-simple-production.up.railway.app/demo"));
+  assert.ok(cancellation.message.includes("Barbería Central"));
+  assert.ok(cancellation.message.includes("3549432877"));
   assert.equal(cancellation.message.includes("localhost:8080"), false);
 });
 
@@ -826,8 +840,42 @@ test("booking_cancelled en PATCH status cancelado usa PUBLIC_BASE_URL", async ()
     created.body.id,
   ));
 
-  assert.ok(cancellation.message.includes("https://turno-simple-production.up.railway.app/demo"));
+  assert.ok(cancellation.message.includes("Juan Patch"));
+  assert.ok(cancellation.message.includes("Barbería Central"));
+  assert.ok(cancellation.message.includes("3549432877"));
   assert.equal(cancellation.message.includes("localhost:8080"), false);
+});
+
+test("admin cancelar turno ya cancelado devuelve 409 y no duplica booking_cancelled", async () => {
+  const created = await createReservation({ customerName: "Admin Doble" });
+  const first = await adminRequest(`${DEMO_API}/admin/reservations/${created.body.id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "cancelado" }),
+  });
+  const second = await adminRequest(`${DEMO_API}/admin/reservations/${created.body.id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "cancelado" }),
+  });
+  const count = await withDb((db) => db.get(
+    "SELECT COUNT(*) AS count FROM notifications WHERE booking_id = ? AND type = 'booking_cancelled'",
+    created.body.id,
+  ));
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 409);
+  assert.equal(count.count, 1);
+});
+
+test("admin cancelar turno inexistente devuelve 404", async () => {
+  const response = await adminRequest(`${DEMO_API}/admin/reservations/999999/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "cancelado" }),
+  });
+
+  assert.equal(response.status, 404);
 });
 
 test("cancelacion publica cancela reserva y encola booking_cancelled", async () => {
@@ -878,6 +926,143 @@ test("cancelacion publica doble no duplica booking_cancelled", async () => {
   assert.equal(second.status, 200);
   assert.ok(secondText.includes("ya estaba cancelado"));
   assert.equal(count.count, 1);
+});
+
+test("cliente busca turnos por nombre flexible y telefono normalizado", async () => {
+  const first = await createReservation({
+    customerName: "Juan Perez",
+    customerPhone: "3549504056",
+    time: "09:00",
+  });
+  const second = await createReservation({
+    customerName: "JUAN PEREZ",
+    customerPhone: "03549-504056",
+    professionalId: 2,
+    time: "11:00",
+  });
+  const response = await request(`${DEMO_API}/cancellations/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customerName: "juan", customerPhone: "3549504056" }),
+  });
+
+  assert.equal(first.status, 201);
+  assert.equal(second.status, 201);
+  assert.equal(response.status, 200);
+  assert.deepEqual(
+    response.body.reservations.map((item) => item.id).sort((a, b) => a - b),
+    [first.body.id, second.body.id].sort((a, b) => a - b),
+  );
+});
+
+test("cliente cancela turno activo correctamente desde busqueda", async () => {
+  const created = await createReservation({
+    customerName: "Cliente Busca",
+    customerPhone: "3549504056",
+  });
+  const response = await request(`${DEMO_API}/cancellations/${created.body.id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customerName: "cliente", customerPhone: "03549504056" }),
+  });
+  const row = await withDb((db) => db.get(
+    "SELECT status, cancelled_by FROM reservations WHERE id = ?",
+    created.body.id,
+  ));
+  const cancellation = await withDb((db) => db.get(
+    "SELECT type FROM notifications WHERE booking_id = ? AND type = 'booking_cancelled'",
+    created.body.id,
+  ));
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.message, "Tu turno fue cancelado correctamente.");
+  assert.equal(row.status, "cancelado");
+  assert.equal(row.cancelled_by, "client");
+  assert.equal(cancellation.type, "booking_cancelled");
+});
+
+test("cliente no puede cancelar turno ya cancelado ni asistido", async () => {
+  const cancelled = await createReservation({ customerName: "Cliente Estado", time: "09:00" });
+  const assisted = await createReservation({
+    customerName: "Cliente Estado",
+    professionalId: 2,
+    time: "11:00",
+  });
+  await adminRequest(`${DEMO_API}/admin/reservations/${cancelled.body.id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "cancelado" }),
+  });
+  await adminRequest(`${DEMO_API}/admin/reservations/${assisted.body.id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "asistio" }),
+  });
+
+  const cancelledAgain = await request(`${DEMO_API}/cancellations/${cancelled.body.id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customerName: "cliente", customerPhone: "3549504056" }),
+  });
+  const assistedCancel = await request(`${DEMO_API}/cancellations/${assisted.body.id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customerName: "cliente", customerPhone: "3549504056" }),
+  });
+
+  assert.equal(cancelledAgain.status, 409);
+  assert.equal(assistedCancel.status, 409);
+});
+
+test("cliente ve advertencia de seña si cancela con menos de 24 horas", async () => {
+  await createDepositService("sena-cerca", 2000);
+  const soon = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  soon.setMinutes(Math.ceil(soon.getMinutes() / 30) * 30, 0, 0);
+  if (soon.getMinutes() === 60) {
+    soon.setHours(soon.getHours() + 1, 0, 0, 0);
+  }
+  const date = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, "0")}-${String(soon.getDate()).padStart(2, "0")}`;
+  const time = `${String(soon.getHours()).padStart(2, "0")}:${String(soon.getMinutes()).padStart(2, "0")}`;
+  await withDb(async (db) => {
+    await db.run(
+      "INSERT OR IGNORE INTO professional_schedules (business_id, professional_id, weekday, start_time, end_time, interval_minutes) VALUES (1, 1, ?, '00:00', '23:59', 30)",
+      soon.getDay(),
+    );
+  });
+  const created = await createReservation({
+    serviceId: "sena-cerca",
+    date,
+    time,
+    customerName: "Cliente Seña",
+    customerPhone: "3549504056",
+  });
+  const response = await request(`${DEMO_API}/cancellations/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customerName: "seña", customerPhone: "3549504056" }),
+  });
+
+  assert.equal(created.status, 201);
+  assert.equal(response.status, 200);
+  assert.equal(response.body.reservations[0].depositWarning, true);
+});
+
+test("cancelacion no rompe si falta telefono del negocio", async () => {
+  await withDb((db) => db.run("UPDATE businesses SET whatsapp = '' WHERE slug = 'demo'"));
+  const created = await createReservation({ customerName: "Sin Telefono Negocio" });
+  const response = await adminRequest(`${DEMO_API}/admin/reservations/${created.body.id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "cancelado" }),
+  });
+  const cancellation = await withDb((db) => db.get(
+    "SELECT message FROM notifications WHERE booking_id = ? AND type = 'booking_cancelled'",
+    created.body.id,
+  ));
+  await withDb((db) => db.run("UPDATE businesses SET whatsapp = '3549432877' WHERE slug = 'demo'"));
+
+  assert.equal(response.status, 200);
+  assert.ok(cancellation.message.includes("el negocio"));
 });
 
 test("un profesional de otro negocio no puede recibir reserva en demo", async () => {

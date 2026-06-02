@@ -823,7 +823,15 @@ root.addEventListener("click", async (event) => {
     return;
   }
   if (action === "cancel-status") {
-    await sendJson(`${BUSINESS_API_URL}/admin/reservations/${id}/status`, "PATCH", { status: "cancelado" });
+    const response = await adminFetch(`${BUSINESS_API_URL}/admin/reservations/${id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "cancelado" }),
+    });
+    if (!response.ok) {
+      window.alert(await readErrorMessage(response));
+      return;
+    }
     await refreshReservationsOnly();
     return;
   }

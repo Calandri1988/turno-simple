@@ -4,6 +4,9 @@ const businessNameElement = document.querySelector("#business-name");
 const businessMetaElement = document.querySelector("#business-meta");
 const assistantTitleElement = document.querySelector("#assistant-title");
 const assistantMessageElement = document.querySelector("#assistant-message");
+const cancelSearchForm = document.querySelector("#cancel-search-form");
+const cancelSearchError = document.querySelector("#cancel-search-error");
+const cancelSearchResults = document.querySelector("#cancel-search-results");
 
 const parts = window.location.pathname.split("/").filter(Boolean);
 const BUSINESS_SLUG = parts[0] || "demo";
@@ -154,6 +157,43 @@ function getProfessionalsForService() {
 function formatPrice(price) {
   if (price === null || Number.isNaN(price)) return "";
   return `$${price.toLocaleString("es-AR")}`;
+}
+
+function statusLabel(status) {
+  const labels = {
+    pendiente: "Pendiente de seña",
+    reservado: "Reservado",
+    confirmado: "Confirmado",
+    cancelado: "Cancelado",
+    asistio: "Asistió",
+    no_asistio: "No asistió",
+  };
+  return labels[status] || status;
+}
+
+function renderCancelResults(reservations, customerName, customerPhone) {
+  if (!cancelSearchResults) return;
+  if (reservations.length === 0) {
+    cancelSearchResults.innerHTML = `
+      <div class="admin-empty">
+        <strong>No encontramos un turno activo con esos datos.</strong>
+        <p>Revisá el nombre y teléfono ingresados o comunicate directamente con el negocio.</p>
+      </div>
+    `;
+    return;
+  }
+
+  cancelSearchResults.innerHTML = reservations.map((reservation) => `
+    <article class="agenda-row cancel-result-card">
+      <div>
+        <strong>${escapeHtml(reservation.serviceName)} con ${escapeHtml(reservation.professionalName)}</strong>
+        <span>${escapeHtml(formatDateLabel(reservation.date))} a las ${escapeHtml(reservation.time)}</span>
+        <small>${escapeHtml(statusLabel(reservation.status))}</small>
+        ${reservation.depositWarning ? `<p class="deposit-note">Este turno tiene seña registrada. Si cancelás con menos de 24 horas de anticipación, la seña podría no ser reintegrable según la política del negocio.</p>` : ""}
+      </div>
+      <button class="danger-button" type="button" data-public-cancel="${reservation.id}" data-name="${escapeHtml(customerName)}" data-phone="${escapeHtml(customerPhone)}" ${reservation.canCancel ? "" : "disabled"}>Cancelar turno</button>
+    </article>
+  `).join("");
 }
 
 function setStep(step) {
@@ -461,6 +501,68 @@ root.addEventListener("submit", async (event) => {
         : "No pudimos confirmar el turno. Intenta otra vez.";
   }
 });
+
+if (cancelSearchForm) {
+  cancelSearchForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = new FormData(cancelSearchForm);
+    const customerName = String(data.get("name") || "").trim();
+    const customerPhoneInput = String(data.get("phone") || "").trim();
+    const phone = typeof normalizePhone === "function"
+      ? normalizePhone(customerPhoneInput)
+      : { ok: true, normalized: customerPhoneInput };
+
+    cancelSearchError.hidden = true;
+    cancelSearchError.textContent = "";
+    cancelSearchResults.innerHTML = "";
+
+    if (!customerName || !phone.ok) {
+      cancelSearchError.hidden = false;
+      cancelSearchError.textContent = phone.error === "missing_area_code"
+        ? "Ingresá el número con código de área. Ejemplo: 3549432877."
+        : "Ingresá nombre y WhatsApp válidos.";
+      return;
+    }
+
+    const response = await fetch(`${BUSINESS_API_URL}/cancellations/search`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customerName, customerPhone: phone.normalized }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      cancelSearchError.hidden = false;
+      cancelSearchError.textContent = payload.error || "No pudimos buscar tus turnos.";
+      return;
+    }
+
+    renderCancelResults(payload.reservations || [], customerName, phone.normalized);
+  });
+}
+
+if (cancelSearchResults) {
+  cancelSearchResults.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-public-cancel]");
+    if (!button) return;
+    if (!window.confirm("¿Confirmás que querés cancelar este turno?")) return;
+
+    const response = await fetch(`${BUSINESS_API_URL}/cancellations/${button.dataset.publicCancel}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerName: button.dataset.name,
+        customerPhone: button.dataset.phone,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      window.alert(payload.error || "No pudimos cancelar el turno.");
+      return;
+    }
+
+    cancelSearchResults.innerHTML = `<div class="success-screen"><h2>Tu turno fue cancelado correctamente.</h2><span>Gracias por avisarnos con anticipación.</span></div>`;
+  });
+}
 
 async function init() {
   try {

@@ -29,6 +29,21 @@
         <div id="wizard-root"></div>
       </section>
 
+      <section class="wizard-card cancellation-card" aria-label="Cancelar o consultar turno">
+        <div class="step-copy">
+          <p>¿Ya tenés un turno?</p>
+          <h2>Cancelar o consultar mi turno</h2>
+          <span>Ingresá tus datos para ver tus próximos turnos activos.</span>
+        </div>
+        <form id="cancel-search-form" class="wizard-form">
+          <label><span>Nombre</span><input name="name" autocomplete="name" required /></label>
+          <label><span>WhatsApp</span><input name="phone" type="tel" autocomplete="tel" placeholder="Ej: 3549432877" required /></label>
+          <p class="form-error" id="cancel-search-error" hidden></p>
+          <button class="secondary-button" type="submit">Buscar mis turnos</button>
+        </form>
+        <div id="cancel-search-results" class="cancel-results"></div>
+      </section>
+
       <section class="faq-section" aria-label="Preguntas frecuentes">
         <div class="faq-heading">
           <p class="eyebrow">Preguntas frecuentes</p>

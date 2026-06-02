@@ -1,5 +1,5 @@
 {
   "type": "booking_cancelled",
   "channel": "whatsapp",
-  "message": "Hola {{client_name}}.\n\nTu turno para {{service}} del {{date}} a las {{time}} fue cancelado correctamente.\n\nCuando quieras, podés reservar nuevamente desde:\n\n{{booking_url}}"
+  "message": "¡Hola {{client_name}}! 👋\n\nTe informamos que el turno para {{service}} en {{business_name}}, programado para el día {{date}} a las {{time}}, fue cancelado.\n\nSi deseás reservar nuevamente, podés ingresar a la página del negocio y seleccionar otro horario disponible.\n\nPara cualquier consulta, comunicate directamente con {{business_name}} al {{business_phone}}.\n\nGracias por tu comprensión.\n\nReserva gestionada con Momentia."
 }

@@ -33,11 +33,18 @@ function isWhatsAppEnabled() {
 
 function extractCancelledFallbackParameters(message) {
   const text = String(message || "");
-  const match = text.match(/Hola\s+(.+?)\.\s+Tu turno para\s+(.+?)\s+del\s+(\d{2}\/\d{2}\/\d{4})/is);
+  const match = text.match(/¡?Hola\s+(.+?)!\s*.*?turno para\s+(.+?)\s+en\s+(.+?),\s+programado para el día\s+(\d{2}\/\d{2}\/\d{4})\s+a las\s+(\d{2}:\d{2}).*?al\s+(.+?)\./is);
   if (!match) {
     return null;
   }
-  return [match[1].trim(), match[2].trim(), match[3].trim()];
+  return [
+    match[1].trim(),
+    match[2].trim(),
+    match[3].trim(),
+    match[4].trim(),
+    match[5].trim(),
+    match[6].trim(),
+  ];
 }
 
 async function buildWhatsAppTemplatePayload(database, notification) {
@@ -48,7 +55,8 @@ async function buildWhatsAppTemplatePayload(database, notification) {
             r.*,
             b.name AS business_name,
             b.address AS business_address,
-            b.payment_alias
+            b.payment_alias,
+            b.whatsapp AS business_phone
           FROM reservations r
           JOIN businesses b ON b.id = r.business_id
           WHERE r.id = ?
@@ -108,7 +116,14 @@ async function buildWhatsAppTemplatePayload(database, notification) {
   if (notification.type === "booking_cancelled") {
     return {
       template: notification.type,
-      parameters: [booking.customer_name, booking.service_name, date],
+      parameters: [
+        booking.customer_name,
+        booking.service_name,
+        booking.business_name || "el negocio",
+        date,
+        booking.time,
+        booking.business_phone || "el negocio",
+      ],
     };
   }
 

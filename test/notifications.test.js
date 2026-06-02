@@ -205,6 +205,7 @@ test("buildWhatsAppTemplatePayload usa variables aprobadas por plantilla", async
     time: "10:00",
     business_name: "Barbería Central",
     business_address: "Centro - Cruz del Eje",
+    business_phone: "3549432877",
     payment_alias: "barberia.central.mp",
   };
   const database = {
@@ -239,11 +240,18 @@ test("buildWhatsAppTemplatePayload usa variables aprobadas por plantilla", async
     booking_id: 1,
     type: "booking_reminder_24h",
   });
+  const cancelled = await buildWhatsAppTemplatePayload(database, {
+    id: 5,
+    business_id: 1,
+    booking_id: 1,
+    type: "booking_cancelled",
+  });
 
   assert.deepEqual(confirmed.parameters, ["Ana", "Coloración", "08/06/2026", "10:00", "Centro - Cruz del Eje"]);
   assert.deepEqual(paymentRequest.parameters, ["Ana", "Coloración", 8000, "barberia.central.mp"]);
   assert.deepEqual(paymentConfirmed.parameters, ["Ana", "Coloración", "08/06/2026", "10:00"]);
   assert.deepEqual(reminder.parameters, ["Ana", "Coloración", "08/06/2026", "10:00", "Centro - Cruz del Eje"]);
+  assert.deepEqual(cancelled.parameters, ["Ana", "Coloración", "Barbería Central", "08/06/2026", "10:00", "3549432877"]);
 });
 
 test("processPendingNotifications no revienta si Meta falla", async () => {

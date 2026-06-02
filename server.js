@@ -28,6 +28,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const reservationStatuses = new Set(["pendiente", "reservado", "confirmado", "cancelado", "asistio", "no_asistio"]);
 const depositStatuses = new Set(["none", "pending", "paid"]);
 const adminRoles = new Set(["owner", "staff"]);
+const cancellableStatuses = new Set(["pendiente", "reservado", "confirmado"]);
 
 const servicesSeed = [
   { id: "consulta", name: "Perfilado de barba", durationMinutes: 30, price: 8000, requiresDeposit: 0, depositAmount: 0 },
@@ -130,14 +131,25 @@ async function ensureBusinessesTable() {
 async function ensureDemoBusiness() {
   await db.run(
     `
-      INSERT INTO businesses (name, slug, category, city)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO businesses (name, slug, category, city, whatsapp, address, payment_alias)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(slug) DO UPDATE SET
         name = excluded.name,
         category = excluded.category,
-        city = excluded.city
+        city = excluded.city,
+        whatsapp = COALESCE(NULLIF(businesses.whatsapp, ''), excluded.whatsapp),
+        address = COALESCE(NULLIF(businesses.address, ''), excluded.address),
+        payment_alias = COALESCE(NULLIF(businesses.payment_alias, ''), excluded.payment_alias)
     `,
-    ["Barbería Central", "demo", "Barbería", "Cruz del Eje"],
+    [
+      "Barbería Central",
+      "demo",
+      "Barbería",
+      "Cruz del Eje",
+      "3549432877",
+      "Centro - Cruz del Eje",
+      "barberia.central.mp",
+    ],
   );
 
   return db.get("SELECT * FROM businesses WHERE slug = ?", "demo");
@@ -651,6 +663,16 @@ function mapReservation(row) {
   };
 }
 
+function mapCancellableReservation(row) {
+  const bookingDateTime = buildBookingDateTime(row.date, row.time);
+  const hoursUntil = (bookingDateTime.getTime() - Date.now()) / (60 * 60 * 1000);
+  return {
+    ...mapReservation(row),
+    canCancel: hoursUntil > 0 && cancellableStatuses.has(row.status),
+    depositWarning: row.deposit_status !== "none" && hoursUntil > 0 && hoursUntil < 24,
+  };
+}
+
 function mapService(row) {
   return {
     id: row.id,
@@ -827,6 +849,13 @@ function buildApprovedTemplateTestParameters(template, business) {
 
 async function enqueueBookingCancelledNotification(business, booking, req) {
   await cancelPendingBookingNotifications(booking.id);
+  if (!booking.customer_phone) {
+    console.warn(`[notifications] booking_cancelled skipped: missing customer phone booking_id=${booking.id}`);
+    return;
+  }
+  if (!business.whatsapp) {
+    console.warn(`[notifications] booking_cancelled: missing business phone business_id=${business.id}`);
+  }
   const bookingUrl = buildBookingPublicUrl(business, req);
 
   console.log("[notifications] booking_cancelled baseUrl=", getPublicBaseUrl(req));
@@ -835,8 +864,10 @@ async function enqueueBookingCancelledNotification(business, booking, req) {
   const cancelled = renderTemplate("booking_cancelled", {
     client_name: booking.customer_name,
     service: booking.service_name,
+    business_name: business.name || "el negocio",
     date: formatDate(booking.date),
     time: booking.time,
+    business_phone: business.whatsapp || "el negocio",
     booking_url: bookingUrl,
   });
 
@@ -2042,6 +2073,19 @@ app.patch("/api/businesses/:slug/admin/reservations/:id/status", requireAdmin, a
     return;
   }
 
+  const current = await db.get(
+    "SELECT * FROM reservations WHERE business_id = ? AND id = ?",
+    [business.id, id],
+  );
+  if (!current) {
+    res.status(404).json({ error: "Reserva no encontrada." });
+    return;
+  }
+  if (status === "cancelado" && current.status === "cancelado") {
+    res.status(409).json({ error: "La reserva ya estaba cancelada." });
+    return;
+  }
+
   const result = status === "cancelado"
     ? await db.run(
         "UPDATE reservations SET status = ?, cancelled_by = COALESCE(cancelled_by, 'admin') WHERE business_id = ? AND id = ?",
@@ -2239,6 +2283,101 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
 
     res.status(500).json({ error: "No se pudo crear la reserva." });
   }
+});
+
+app.post("/api/businesses/:slug/cancellations/search", async (req, res) => {
+  const business = await getBusinessBySlug(req.params.slug);
+  if (!business) {
+    res.status(404).json({ error: "Negocio no encontrado." });
+    return;
+  }
+
+  const customerName = cleanText(req.body.customerName);
+  const phone = normalizePhone(cleanText(req.body.customerPhone));
+  if (!customerName || !phone.ok) {
+    res.status(400).json({
+      error: phone.error === "missing_area_code"
+        ? "Ingresá el número con código de área. Ejemplo: 3549432877."
+        : "Ingresá nombre y WhatsApp válidos.",
+      code: phone.error || "missing_data",
+    });
+    return;
+  }
+
+  const rows = await db.all(
+    `
+      SELECT *
+      FROM reservations
+      WHERE business_id = ?
+        AND customer_phone = ?
+        AND LOWER(customer_name) LIKE LOWER(?)
+        AND status IN ('pendiente', 'reservado', 'confirmado')
+      ORDER BY date ASC, time ASC
+    `,
+    [business.id, phone.normalized, `%${customerName}%`],
+  );
+
+  res.json({ reservations: rows.map(mapCancellableReservation) });
+});
+
+app.post("/api/businesses/:slug/cancellations/:id", async (req, res) => {
+  const business = await getBusinessBySlug(req.params.slug);
+  if (!business) {
+    res.status(404).json({ error: "Negocio no encontrado." });
+    return;
+  }
+
+  const id = parseRequiredPositiveInteger(req.params.id);
+  const customerName = cleanText(req.body.customerName);
+  const phone = normalizePhone(cleanText(req.body.customerPhone));
+  if (!id || !customerName || !phone.ok) {
+    res.status(400).json({
+      error: phone.error === "missing_area_code"
+        ? "Ingresá el número con código de área. Ejemplo: 3549432877."
+        : "Datos inválidos para cancelar el turno.",
+      code: phone.error || "invalid_data",
+    });
+    return;
+  }
+
+  const booking = await db.get(
+    `
+      SELECT *
+      FROM reservations
+      WHERE business_id = ?
+        AND id = ?
+        AND customer_phone = ?
+        AND LOWER(customer_name) LIKE LOWER(?)
+    `,
+    [business.id, id, phone.normalized, `%${customerName}%`],
+  );
+  if (!booking) {
+    res.status(404).json({ error: "No encontramos un turno activo con esos datos." });
+    return;
+  }
+  if (booking.status === "cancelado") {
+    res.status(409).json({ error: "Este turno ya estaba cancelado." });
+    return;
+  }
+  if (!cancellableStatuses.has(booking.status)) {
+    res.status(409).json({ error: "Este turno ya no puede cancelarse desde la web." });
+    return;
+  }
+  if (buildBookingDateTime(booking.date, booking.time).getTime() <= Date.now()) {
+    res.status(409).json({ error: "Este turno ya pasó y no puede cancelarse desde la web." });
+    return;
+  }
+
+  await db.run(
+    "UPDATE reservations SET status = 'cancelado', cancelled_by = 'client' WHERE business_id = ? AND id = ?",
+    [business.id, booking.id],
+  );
+  const cancelled = await db.get(
+    "SELECT * FROM reservations WHERE business_id = ? AND id = ?",
+    [business.id, booking.id],
+  );
+  await enqueueBookingCancelledNotification(business, cancelled, req);
+  res.json({ reservation: mapReservation(cancelled), message: "Tu turno fue cancelado correctamente." });
 });
 
 app.delete("/api/businesses/:slug/reservations/:id", requireAdmin, async (req, res) => {
