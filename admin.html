@@ -14,12 +14,17 @@
           <h1 id="business-name">Momentia</h1>
           <p class="admin-hero-copy">Agenda y clientes en un solo lugar.</p>
           <p id="business-meta" class="business-meta"></p>
+          <p id="admin-current-date" class="admin-current-date"></p>
           <nav class="admin-nav" aria-label="Navegacion admin">
             <a id="admin-home-link" href="/demo/admin">Panel</a>
             <a id="admin-notifications-link" href="/demo/admin/notifications">Notificaciones</a>
           </nav>
         </div>
-        <button id="logout-button" class="secondary-button" type="button" hidden>Salir</button>
+        <div class="admin-topbar-actions">
+          <a id="public-page-link" class="secondary-button link-button" href="/demo" target="_blank" rel="noopener">Ver pagina publica</a>
+          <button id="copy-public-link-button" class="secondary-button" type="button">Copiar link de reservas</button>
+          <button id="logout-button" class="secondary-button" type="button" hidden>Salir</button>
+        </div>
       </header>
 
       <section id="admin-root" class="admin-workspace" aria-live="polite"></section>

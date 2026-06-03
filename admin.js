@@ -4,6 +4,9 @@ const businessNameElement = document.querySelector("#business-name");
 const businessMetaElement = document.querySelector("#business-meta");
 const adminHomeLink = document.querySelector("#admin-home-link");
 const adminNotificationsLink = document.querySelector("#admin-notifications-link");
+const adminCurrentDateElement = document.querySelector("#admin-current-date");
+const publicPageLink = document.querySelector("#public-page-link");
+const copyPublicLinkButton = document.querySelector("#copy-public-link-button");
 
 const parts = window.location.pathname.split("/").filter(Boolean);
 const BUSINESS_SLUG = parts[0] || "demo";
@@ -27,12 +30,22 @@ let businessDetails = {
 };
 let filterDate = toIsoDate(new Date());
 let filterProfessionalId = "";
+let filterStatus = "";
+let filterCustomer = "";
+let filterPhone = "";
+let agendaViewMode = "agenda";
 let pollingId = null;
 let lastUpdatedAt = null;
 let knownReservationIds = new Set();
 
 if (adminHomeLink) adminHomeLink.href = `/${BUSINESS_SLUG}/admin`;
 if (adminNotificationsLink) adminNotificationsLink.href = `/${BUSINESS_SLUG}/admin/notifications`;
+if (publicPageLink) publicPageLink.href = `/${BUSINESS_SLUG}`;
+if (adminCurrentDateElement) adminCurrentDateElement.textContent = new Date().toLocaleDateString("es-AR", {
+  weekday: "long",
+  day: "2-digit",
+  month: "long",
+});
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -166,6 +179,61 @@ async function readErrorMessage(response) {
   }
 }
 
+function formatPrice(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return "-";
+  return `$${number.toLocaleString("es-AR")}`;
+}
+
+function findServiceForReservation(reservation) {
+  return services.find((service) => service.id === reservation.serviceId)
+    || services.find((service) => service.name === reservation.serviceName)
+    || null;
+}
+
+function getReservationPrice(reservation) {
+  return findServiceForReservation(reservation)?.price ?? "";
+}
+
+function getReservationDepositAmount(reservation) {
+  const service = findServiceForReservation(reservation);
+  if (!service) return 0;
+  return Number(service.depositAmount) || 0;
+}
+
+function getFilteredAgendaItems() {
+  const customer = filterCustomer.trim().toLowerCase();
+  const phone = filterPhone.replace(/\D/g, "");
+  return agenda.filter((item) => {
+    if (filterStatus && item.status !== filterStatus) return false;
+    if (customer && !item.customerName.toLowerCase().includes(customer)) return false;
+    if (phone && !item.customerPhone.replace(/\D/g, "").includes(phone)) return false;
+    return true;
+  });
+}
+
+function getNextReservation(items = allReservations) {
+  const today = toIsoDate(new Date());
+  const now = new Date();
+  return sortAgendaByTime(items.filter((item) => {
+    if (item.status === "cancelado") return false;
+    if (item.date < today) return false;
+    const date = parseIsoDate(item.date);
+    const [hours, minutes] = item.time.split(":").map(Number);
+    date.setHours(hours || 0, minutes || 0, 0, 0);
+    return date >= now;
+  })).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))[0] || null;
+}
+
+function getMostLoadedProfessional(items) {
+  const counts = new Map();
+  for (const item of items) {
+    const key = item.professionalName || "Sin profesional";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || null;
+}
+
 async function loadBusiness() {
   const response = await fetch(BUSINESS_API_URL);
   if (response.status === 404) {
@@ -239,10 +307,17 @@ function updateFreshnessText() {
 function renderAgendaSections() {
   const todayList = root.querySelector("[data-agenda-list='today']");
   const copyTools = root.querySelector("[data-copy-tools-slot]");
+  const dashboard = root.querySelector("[data-admin-dashboard]");
+  const viewSlot = root.querySelector("[data-agenda-view-slot]");
   const upcomingList = root.querySelector("[data-agenda-list='upcoming']");
   const upcoming = allReservations.filter((item) => item.date >= toIsoDate(new Date())).slice(0, 8);
-  if (copyTools) copyTools.innerHTML = renderCopyTools(agenda);
-  if (todayList) todayList.innerHTML = renderAgendaList(agenda, "No hay turnos para esta fecha.");
+  const visibleAgenda = getFilteredAgendaItems();
+  if (dashboard) dashboard.innerHTML = renderDashboard(agenda);
+  if (copyTools) copyTools.innerHTML = renderCopyTools(visibleAgenda);
+  if (viewSlot) viewSlot.innerHTML = agendaViewMode === "professional"
+    ? renderProfessionalAgenda(visibleAgenda)
+    : renderAgendaList(visibleAgenda, "No hay turnos con estos filtros.");
+  if (todayList) todayList.innerHTML = renderAgendaList(visibleAgenda, "No hay turnos con estos filtros.");
   if (upcomingList) upcomingList.innerHTML = renderAgendaList(upcoming, "No hay proximos turnos.");
   updateFreshnessText();
 }
@@ -324,7 +399,7 @@ async function copyText(text) {
 
 async function copyProfessionalDay(professionalId) {
   const id = Number(professionalId);
-  const items = sortAgendaByTime(agenda.filter((item) => Number(item.professionalId) === id));
+  const items = sortAgendaByTime(getFilteredAgendaItems().filter((item) => Number(item.professionalId) === id));
   const professional = professionals.find((item) => item.id === id);
   const professionalName = professional?.name || items[0]?.professionalName || "Profesional";
   const text = buildProfessionalDaySummary(professionalName, formatDateLabel(filterDate), items);
@@ -334,6 +409,57 @@ async function copyProfessionalDay(professionalId) {
     feedback.textContent = "Turnos copiados";
     feedback.hidden = false;
   }
+}
+
+function buildFullAgendaSummary(items) {
+  const lines = [`Agenda de hoy - ${businessName}`, formatDateLabel(filterDate), ""];
+  for (const group of groupAgendaByProfessional(items)) {
+    lines.push(group.name);
+    lines.push("");
+    for (const item of sortAgendaByTime(group.items)) {
+      lines.push(`${item.time} - ${item.customerName} - ${item.serviceName}`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
+}
+
+async function copyFullAgenda() {
+  await copyText(buildFullAgendaSummary(getFilteredAgendaItems()));
+  const feedback = root.querySelector("[data-copy-feedback]");
+  if (feedback) {
+    feedback.textContent = "Agenda copiada";
+    feedback.hidden = false;
+  }
+}
+
+function csvEscape(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function downloadAgendaCsv() {
+  const headers = ["Fecha", "Hora", "Cliente", "Telefono", "Servicio", "Profesional", "Estado", "Precio", "Sena"];
+  const rows = getFilteredAgendaItems().map((item) => [
+    item.date,
+    item.time,
+    item.customerName,
+    item.customerPhone,
+    item.serviceName,
+    item.professionalName,
+    getStatusLabel(item.status),
+    formatPrice(getReservationPrice(item)),
+    formatPrice(getReservationDepositAmount(item)),
+  ]);
+  const csv = [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `agenda-${BUSINESS_SLUG}-${filterDate || "turnos"}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function openWhatsapp(id) {
@@ -403,35 +529,115 @@ function statusBadge(status) {
   return `<span class="status-badge booking-status-badge ${escapeHtml(getStatusClass(status))} status-${escapeHtml(status)}">${escapeHtml(getStatusLabel(status))}</span>`;
 }
 
+function renderDashboard(items) {
+  const next = getNextReservation();
+  const mostLoaded = getMostLoadedProfessional(items);
+  const counts = {
+    today: items.length,
+    pending: items.filter((item) => item.depositStatus === "pending" || item.status === "pendiente").length,
+    confirmed: items.filter((item) => item.status === "confirmado").length,
+    cancelled: items.filter((item) => item.status === "cancelado").length,
+  };
+  return `
+    <div class="admin-kpi-card">
+      <span>Turnos hoy</span>
+      <strong>${counts.today}</strong>
+      <small>${escapeHtml(formatDateLabel(filterDate))}</small>
+    </div>
+    <div class="admin-kpi-card warning">
+      <span>Pendientes de sena</span>
+      <strong>${counts.pending}</strong>
+      <small>Revisar pagos</small>
+    </div>
+    <div class="admin-kpi-card success">
+      <span>Confirmados</span>
+      <strong>${counts.confirmed}</strong>
+      <small>Listos para atender</small>
+    </div>
+    <div class="admin-kpi-card muted">
+      <span>Cancelados</span>
+      <strong>${counts.cancelled}</strong>
+      <small>Del dia filtrado</small>
+    </div>
+    <div class="admin-kpi-card next">
+      <span>Proximo turno</span>
+      <strong>${next ? escapeHtml(next.time) : "-"}</strong>
+      <small>${next ? `${escapeHtml(next.customerName)} - ${escapeHtml(next.serviceName)}` : "Sin proximos turnos"}</small>
+    </div>
+    <div class="admin-kpi-card">
+      <span>Mas carga</span>
+      <strong>${mostLoaded ? escapeHtml(mostLoaded[1]) : "0"}</strong>
+      <small>${mostLoaded ? escapeHtml(mostLoaded[0]) : "Sin turnos"}</small>
+    </div>
+  `;
+}
+
 function renderAgendaList(items, emptyText) {
   if (items.length === 0) {
     return `<div class="admin-empty"><strong>${escapeHtml(emptyText)}</strong></div>`;
   }
   return items.map((reservation) => `
-    <article class="agenda-row" data-booking-id="${reservation.id}">
-      <div>
-        <strong>${escapeHtml(reservation.time)} - ${escapeHtml(reservation.customerName)} ${statusBadge(reservation.status)}</strong>
+    <article class="agenda-row admin-booking-card" data-booking-id="${reservation.id}">
+      <div class="booking-time-block">
+        <strong>${escapeHtml(reservation.time)}</strong>
+        <small>${escapeHtml(formatDateLabel(reservation.date))}</small>
+      </div>
+      <div class="booking-main-block">
+        <strong>${escapeHtml(reservation.customerName)} ${statusBadge(reservation.status)}</strong>
         <span>${escapeHtml(reservation.serviceName)} con ${escapeHtml(reservation.professionalName)}</span>
-        <small>${escapeHtml(formatDateLabel(reservation.date))} - ${escapeHtml(reservation.customerPhone)}</small>
+        <small>${escapeHtml(reservation.customerPhone)}</small>
+      </div>
+      <div class="booking-money-block">
+        <span>Precio ${escapeHtml(formatPrice(getReservationPrice(reservation)))}</span>
+        <small>Sena ${escapeHtml(formatPrice(getReservationDepositAmount(reservation)))}</small>
       </div>
       ${statusSelect(reservation)}
-      ${reservation.depositStatus === "pending" ? `<button class="secondary-button btn-confirm-payment" type="button" data-action="confirm-deposit" data-id="${reservation.id}">✓ Seña recibida / Confirmar turno</button>` : ""}
-      <button class="secondary-button" type="button" data-action="whatsapp" data-id="${reservation.id}">WhatsApp</button>
-      <button class="danger-button" type="button" data-action="cancel-status" data-id="${reservation.id}">Cancelar</button>
+      <div class="booking-actions">
+        ${reservation.depositStatus === "pending" ? `<button class="secondary-button btn-confirm-payment" type="button" data-action="confirm-deposit" data-id="${reservation.id}">Confirmar sena</button>` : ""}
+        <button class="secondary-button" type="button" data-action="whatsapp" data-id="${reservation.id}">WhatsApp</button>
+        <button class="secondary-button" type="button" data-action="quick-status" data-status="asistio" data-id="${reservation.id}">Asistio</button>
+        <button class="secondary-button" type="button" data-action="quick-status" data-status="no_asistio" data-id="${reservation.id}">No asistio</button>
+        <button class="danger-button" type="button" data-action="cancel-status" data-id="${reservation.id}">Cancelar</button>
+      </div>
     </article>
+  `).join("");
+}
+
+function renderProfessionalAgenda(items) {
+  const groups = groupAgendaByProfessional(items);
+  if (groups.length === 0) return `<div class="admin-empty"><strong>No hay turnos con estos filtros.</strong></div>`;
+  return groups.map((group) => `
+    <section class="professional-agenda-card">
+      <div class="professional-agenda-header">
+        <div>
+          <h3>${escapeHtml(group.name)}</h3>
+          <p>${group.items.length} turno${group.items.length === 1 ? "" : "s"}</p>
+        </div>
+        <button class="secondary-button" type="button" data-action="copy-day" data-id="${group.id}">Copiar agenda</button>
+      </div>
+      <div class="professional-agenda-list">
+        ${sortAgendaByTime(group.items).map((item) => `
+          <div class="professional-agenda-item" data-booking-id="${item.id}">
+            <strong>${escapeHtml(item.time)} - ${escapeHtml(item.customerName)}</strong>
+            <span>${escapeHtml(item.serviceName)} ${statusBadge(item.status)}</span>
+          </div>
+        `).join("")}
+      </div>
+    </section>
   `).join("");
 }
 
 function renderCopyTools(items) {
   const groups = groupAgendaByProfessional(items);
-  if (groups.length === 0) return "";
   return `
     <div class="copy-tools">
       <div>
-        <strong>Copiar turnos del dia</strong>
-        <span>Texto listo para pegar en WhatsApp.</span>
+        <strong>Compartir agenda</strong>
+        <span>Texto listo para pegar en WhatsApp o CSV para descargar.</span>
       </div>
       <div class="copy-actions">
+        <button class="secondary-button" type="button" data-action="copy-full-agenda" ${items.length ? "" : "disabled"}>Copiar agenda del dia</button>
+        <button class="secondary-button" type="button" data-action="download-csv" ${items.length ? "" : "disabled"}>Descargar CSV</button>
         ${groups.map((group) => `
           <button class="secondary-button" type="button" data-action="copy-day" data-id="${group.id}">Copiar ${escapeHtml(group.name)}</button>
         `).join("")}
@@ -668,12 +874,16 @@ async function renderAdmin() {
   knownReservationIds = new Set(reservations.map((item) => item.id));
   logoutButton.hidden = false;
   const upcoming = reservations.filter((item) => item.date >= toIsoDate(new Date())).slice(0, 8);
+  const visibleAgenda = getFilteredAgendaItems();
   root.innerHTML = `
+    <section class="admin-dashboard" data-admin-dashboard>
+      ${renderDashboard(agenda)}
+    </section>
     <section class="admin-section">
       <div class="admin-section-header">
         <div>
-          <h2>Turnos de hoy</h2>
-          <p>Agenda operativa del dia.</p>
+          <h2>Agenda del dia</h2>
+          <p>Turnos, pagos y acciones rapidas del negocio.</p>
         </div>
         <form id="filter-form" class="admin-filter">
           <input name="date" type="date" value="${escapeHtml(filterDate)}" />
@@ -681,17 +891,27 @@ async function renderAdmin() {
             <option value="">Todos los profesionales</option>
             ${professionals.map((professional) => `<option value="${professional.id}" ${String(professional.id) === String(filterProfessionalId) ? "selected" : ""}>${escapeHtml(professional.name)}</option>`).join("")}
           </select>
+          <select name="status">
+            <option value="">Todos los estados</option>
+            ${statusOptions.map((status) => `<option value="${status}" ${status === filterStatus ? "selected" : ""}>${escapeHtml(getStatusLabel(status))}</option>`).join("")}
+          </select>
+          <input name="customer" type="search" placeholder="Buscar cliente" value="${escapeHtml(filterCustomer)}" />
+          <input name="phone" type="search" placeholder="Buscar telefono" value="${escapeHtml(filterPhone)}" />
           <button class="secondary-button" type="button" data-action="today-filter">Hoy</button>
           <button class="secondary-button" type="button" data-action="refresh-agenda">Actualizar turnos</button>
           <button class="secondary-button" type="submit">Buscar</button>
         </form>
       </div>
+      <div class="admin-view-toggle" role="group" aria-label="Vista de agenda">
+        <button class="${agendaViewMode === "agenda" ? "active" : ""}" type="button" data-action="view-agenda">Agenda</button>
+        <button class="${agendaViewMode === "professional" ? "active" : ""}" type="button" data-action="view-professional">Por profesional</button>
+      </div>
       <div class="admin-update-line">
         <span data-last-updated>${lastUpdatedAt ? `Actualizado hace 0 segundos` : ""}</span>
         <strong data-admin-notice hidden></strong>
       </div>
-      <div data-copy-tools-slot>${renderCopyTools(agenda)}</div>
-      <div class="agenda-list" data-agenda-list="today">${renderAgendaList(agenda, "No hay turnos para esta fecha.")}</div>
+      <div data-copy-tools-slot>${renderCopyTools(visibleAgenda)}</div>
+      <div class="agenda-list" data-agenda-view-slot>${agendaViewMode === "professional" ? renderProfessionalAgenda(visibleAgenda) : renderAgendaList(visibleAgenda, "No hay turnos con estos filtros.")}</div>
     </section>
     <section class="admin-section">
       <h2>Proximos turnos</h2>
@@ -735,6 +955,9 @@ root.addEventListener("submit", async (event) => {
     if (form.id === "filter-form") {
       filterDate = data.date || "";
       filterProfessionalId = data.professionalId || "";
+      filterStatus = data.status || "";
+      filterCustomer = data.customer || "";
+      filterPhone = data.phone || "";
       await refreshReservationsOnly();
       return;
     }
@@ -799,6 +1022,25 @@ root.addEventListener("click", async (event) => {
     }
     return;
   }
+  if (action === "copy-full-agenda") {
+    try {
+      await copyFullAgenda();
+    } catch (error) {
+      window.alert("No pudimos copiar la agenda.");
+    }
+    return;
+  }
+  if (action === "download-csv") {
+    downloadAgendaCsv();
+    return;
+  }
+  if (action === "view-agenda" || action === "view-professional") {
+    agendaViewMode = action === "view-professional" ? "professional" : "agenda";
+    await refreshReservationsOnly();
+    const buttons = root.querySelectorAll(".admin-view-toggle button");
+    buttons.forEach((item) => item.classList.toggle("active", item.dataset.action === action));
+    return;
+  }
   if (action === "today-filter") {
     filterDate = toIsoDate(new Date());
     const dateInput = root.querySelector("#filter-form input[name='date']");
@@ -833,6 +1075,19 @@ root.addEventListener("click", async (event) => {
       return;
     }
     await refreshReservationsOnly();
+    return;
+  }
+  if (action === "quick-status") {
+    const nextStatus = button.dataset.status;
+    const updated = await sendJson(`${BUSINESS_API_URL}/admin/reservations/${id}/status`, "PATCH", { status: nextStatus });
+    const status = updated?.status || nextStatus;
+    setReservationState(id, status, updated?.depositStatus);
+    updateReservationCard(id, status, updated?.depositStatus);
+    const notice = root.querySelector("[data-admin-notice]");
+    if (notice) {
+      notice.textContent = "Turno actualizado correctamente";
+      notice.hidden = false;
+    }
     return;
   }
   if (action === "confirm-deposit") {
@@ -886,6 +1141,20 @@ logoutButton.addEventListener("click", () => {
   clearSession();
   renderLogin();
 });
+
+if (copyPublicLinkButton) {
+  copyPublicLinkButton.addEventListener("click", async () => {
+    try {
+      await copyText(`${window.location.origin}/${BUSINESS_SLUG}`);
+      copyPublicLinkButton.textContent = "Link copiado";
+      setTimeout(() => {
+        copyPublicLinkButton.textContent = "Copiar link de reservas";
+      }, 1800);
+    } catch (error) {
+      window.alert("No pudimos copiar el link.");
+    }
+  });
+}
 
 async function init() {
   const exists = await loadBusiness();
