@@ -8,19 +8,29 @@
   </head>
   <body class="public-page">
     <main class="wizard-shell">
-      <header class="wizard-hero">
-        <p class="eyebrow">Reservas online</p>
-        <h1 id="business-name">Momentia</h1>
-        <p class="hero-copy">Reservá tu turno online en pocos pasos.</p>
-        <p class="hero-subcopy">Elegí servicio, horario y dejá tus datos. Nosotros ordenamos todo.</p>
-        <p id="business-meta" class="business-meta"></p>
+      <header class="wizard-hero booking-hero">
+        <div class="business-identity">
+          <div class="business-avatar" id="business-avatar" aria-hidden="true">M</div>
+          <div>
+            <p class="eyebrow">Reserva online disponible</p>
+            <h1 id="business-name">Momentia</h1>
+            <p id="business-meta" class="business-meta"></p>
+          </div>
+        </div>
+        <div class="hero-trust-list" aria-label="Datos del negocio">
+          <span id="business-location-pill" hidden></span>
+          <span>Confirmacion por WhatsApp</span>
+          <span>Turnos en pocos pasos</span>
+        </div>
+        <p class="hero-copy">Reserva tu turno online en pocos pasos</p>
+        <p class="hero-subcopy">Elegis servicio, horario y dejas tus datos. El negocio recibe todo ordenado.</p>
       </header>
 
       <section class="assistant-card" aria-label="Asistente de turnos">
-        <div class="assistant-avatar" aria-hidden="true">TS</div>
+        <div class="assistant-avatar" aria-hidden="true">M</div>
         <div>
           <strong id="assistant-title">Hola, soy el asistente de turnos.</strong>
-          <p id="assistant-message">Te acompaño para que reserves rápido y sin vueltas.</p>
+          <p id="assistant-message">Te acompano para que reserves rapido y sin vueltas.</p>
         </div>
       </section>
 
@@ -31,9 +41,9 @@
 
       <section class="wizard-card cancellation-card" aria-label="Cancelar o consultar turno">
         <div class="step-copy">
-          <p>¿Ya tenés un turno?</p>
+          <p>Turnos activos</p>
           <h2>Cancelar o consultar mi turno</h2>
-          <span>Ingresá tus datos para ver tus próximos turnos activos.</span>
+          <span>Ingresa tus datos para ver tus proximos turnos activos.</span>
         </div>
         <form id="cancel-search-form" class="wizard-form">
           <label><span>Nombre</span><input name="name" autocomplete="name" required /></label>
@@ -51,20 +61,20 @@
         </div>
         <div class="faq-list">
           <details>
-            <summary>¿Dónde están ubicados?</summary>
-            <p>Estamos en Cruz del Eje. Si necesitás la dirección exacta, consultala con el negocio antes de asistir.</p>
+            <summary>Donde estan ubicados?</summary>
+            <p>La ubicacion disponible se muestra arriba. Si necesitas mas detalle, consultalo con el negocio antes de asistir.</p>
           </details>
           <details>
-            <summary>¿Qué medios de pago aceptan?</summary>
-            <p>Por ahora podés consultar los medios de pago disponibles directamente con el negocio.</p>
+            <summary>Que medios de pago aceptan?</summary>
+            <p>Si el servicio requiere sena, vas a ver las instrucciones antes de confirmar. Para otros medios, consulta al negocio.</p>
           </details>
           <details>
-            <summary>¿Puedo cancelar o cambiar mi turno?</summary>
-            <p>Sí. Si necesitás modificarlo o cancelarlo, comunicate con el negocio con la mayor anticipación posible.</p>
+            <summary>Puedo cancelar o cambiar mi turno?</summary>
+            <p>Si ya tenes un turno, podes buscarlo con tu nombre y WhatsApp desde esta misma pagina.</p>
           </details>
           <details>
-            <summary>¿Cuánto dura aproximadamente la atención?</summary>
-            <p>Depende del servicio elegido. En cada servicio vas a ver una duración aproximada cuando esté disponible.</p>
+            <summary>Cuanto dura aproximadamente la atencion?</summary>
+            <p>Depende del servicio elegido. En cada tarjeta vas a ver la duracion aproximada cuando este disponible.</p>
           </details>
         </div>
       </section>

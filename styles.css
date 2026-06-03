@@ -2804,3 +2804,461 @@ body {
     margin-left: 62px;
   }
 }
+
+/* Momentia premium public booking wizard */
+:root {
+  --brand-primary: #635BFF;
+  --brand-primary-light: #EEEDFE;
+  --brand-primary-dark: #4B44CC;
+  --brand-accent: #25D366;
+  --brand-accent-light: #E1F5EE;
+  --bg: #F7F8FC;
+  --surface: #FFFFFF;
+  --text-main: #0F172A;
+  --text-muted: #64748B;
+  --border: #E5E7EB;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+}
+
+.public-page {
+  background:
+    radial-gradient(circle at 50% -8rem, rgba(99, 91, 255, 0.18), transparent 30rem),
+    linear-gradient(180deg, #ffffff 0%, var(--bg) 54%, #eef3ff 100%);
+  color: var(--text-main);
+  font-family: Inter, "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+}
+
+.public-page .wizard-shell {
+  width: min(100%, 520px);
+  padding: 14px;
+}
+
+.booking-hero,
+.public-page .assistant-card,
+.public-page .wizard-card,
+.public-page .faq-section {
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+}
+
+.booking-hero {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.business-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.business-avatar,
+.public-page .assistant-avatar,
+.choice-avatar,
+.pro-avatar,
+.success-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: var(--radius-md);
+  background: var(--brand-primary-light);
+  color: var(--brand-primary);
+  font-weight: 900;
+}
+
+.business-avatar {
+  width: 52px;
+  height: 52px;
+  background: var(--brand-primary);
+  color: #fff;
+}
+
+.booking-hero h1 {
+  color: var(--text-main);
+  font-size: clamp(1.9rem, 8vw, 2.8rem);
+  line-height: 1;
+}
+
+.public-page .eyebrow {
+  color: var(--brand-primary);
+  letter-spacing: 0.04em;
+}
+
+.public-page .business-meta {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: var(--brand-primary-light);
+  color: var(--brand-primary-dark);
+  font-size: 0.82rem;
+}
+
+.hero-trust-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hero-trust-list span {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid rgba(99, 91, 255, 0.16);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.public-page .hero-copy {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.public-page .hero-subcopy {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.public-page .assistant-card {
+  grid-template-columns: 46px minmax(0, 1fr);
+  padding: 14px;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
+}
+
+.public-page .assistant-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--brand-accent-light);
+  color: #0f6e56;
+}
+
+.public-page .wizard-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.public-page .wizard-progress span {
+  min-height: 50px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 7px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.public-page .wizard-progress b {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.public-page .wizard-progress small {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.public-page .wizard-progress span.active {
+  border-color: rgba(99, 91, 255, 0.34);
+  background: var(--brand-primary-light);
+}
+
+.public-page .wizard-progress span.active b {
+  background: var(--brand-primary);
+  color: #fff;
+}
+
+.public-page .wizard-progress span.active small {
+  color: var(--brand-primary-dark);
+}
+
+.public-page .wizard-progress span.done {
+  border-color: rgba(37, 211, 102, 0.32);
+  background: var(--brand-accent-light);
+}
+
+.public-page .wizard-progress span.done b {
+  background: var(--brand-accent);
+  color: #fff;
+}
+
+.public-page .wizard-step,
+.public-page .success-screen {
+  padding: 18px;
+}
+
+.public-page .step-copy p,
+.public-page .success-screen p {
+  color: var(--brand-primary);
+}
+
+.public-page .step-copy h2,
+.public-page .success-screen h2 {
+  color: var(--text-main);
+  font-size: clamp(1.5rem, 6vw, 2.1rem);
+}
+
+.service-grid,
+.professional-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.public-page .choice-card {
+  min-height: 88px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+}
+
+.public-page .choice-card:hover,
+.public-page .choice-card:focus-visible {
+  border-color: var(--brand-primary);
+  background: #fbfbff;
+  box-shadow: 0 0 0 4px var(--brand-primary-light);
+  transform: none;
+}
+
+.public-page .choice-card::after {
+  content: none;
+  display: none;
+}
+
+.choice-avatar,
+.pro-avatar {
+  width: 46px;
+  height: 46px;
+}
+
+.pro-avatar {
+  border-radius: 50%;
+  background: var(--brand-primary);
+  color: #fff;
+}
+
+.pro-avatar.any {
+  background: var(--brand-accent-light);
+  color: #0f6e56;
+}
+
+.choice-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.choice-main strong,
+.choice-side strong {
+  color: var(--text-main);
+}
+
+.choice-main small,
+.choice-side small {
+  color: var(--text-muted);
+}
+
+.choice-side {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  white-space: nowrap;
+}
+
+.public-page .deposit-note,
+.public-page .deposit-box {
+  background: #fff7ed;
+  color: #9a4b05;
+}
+
+.public-page .deposit-note {
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.calendar-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: #fff;
+}
+
+.calendar-title,
+.time-title {
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.public-page .date-strip {
+  gap: 8px;
+}
+
+.public-page .date-strip button {
+  min-width: 94px;
+  min-height: 66px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+}
+
+.public-page .date-strip button small {
+  color: var(--text-muted);
+  font-weight: 800;
+}
+
+.public-page .date-strip button strong {
+  color: var(--text-main);
+  font-size: 0.98rem;
+}
+
+.public-page .date-strip button.selected,
+.public-page .time-grid button:hover,
+.public-page .time-grid button:focus-visible {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: #fff;
+}
+
+.public-page .date-strip button.selected small,
+.public-page .date-strip button.selected strong,
+.public-page .time-grid button:hover,
+.public-page .time-grid button:focus-visible {
+  color: #fff;
+}
+
+.public-page .time-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.public-page .time-grid button {
+  min-height: 46px;
+  border-radius: var(--radius-sm);
+  font-weight: 900;
+}
+
+.public-page .summary-box {
+  gap: 8px;
+  border-radius: var(--radius-md);
+  background: #f8fafc;
+}
+
+.public-page .summary-box span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+.public-page .summary-box b {
+  color: var(--text-main);
+}
+
+.public-page .deposit-box {
+  border-color: #fed7aa;
+  border-radius: var(--radius-md);
+}
+
+.public-page .primary-button {
+  min-height: 50px;
+  border-radius: var(--radius-sm);
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+}
+
+.public-page .primary-button:hover,
+.public-page .primary-button:focus-visible {
+  background: var(--brand-primary-dark);
+}
+
+.public-page .whatsapp-button {
+  background: var(--brand-accent);
+  border-color: var(--brand-accent);
+}
+
+.public-page .success-icon {
+  width: 66px;
+  height: 66px;
+  margin: 0 auto 4px;
+  border-radius: 50%;
+  background: var(--brand-accent-light);
+  color: #0f6e56;
+}
+
+.public-page .success-screen {
+  text-align: center;
+}
+
+.public-page .success-screen .summary-box {
+  text-align: left;
+}
+
+.public-page .cancellation-card,
+.public-page .faq-section {
+  margin-top: 14px;
+  padding: 16px;
+}
+
+.public-page .faq-list details {
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 520px) {
+  .public-page .wizard-shell {
+    padding: 10px;
+  }
+
+  .public-page .wizard-progress {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .public-page .choice-card {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .choice-side {
+    grid-column: 2;
+    justify-items: start;
+  }
+
+  .public-page .time-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

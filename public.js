@@ -2,6 +2,8 @@ const root = document.querySelector("#wizard-root");
 const progress = document.querySelector("#wizard-progress");
 const businessNameElement = document.querySelector("#business-name");
 const businessMetaElement = document.querySelector("#business-meta");
+const businessAvatarElement = document.querySelector("#business-avatar");
+const businessLocationPillElement = document.querySelector("#business-location-pill");
 const assistantTitleElement = document.querySelector("#assistant-title");
 const assistantMessageElement = document.querySelector("#assistant-message");
 const cancelSearchForm = document.querySelector("#cancel-search-form");
@@ -85,7 +87,7 @@ function normalizeService(service) {
 function servicePaymentInstructions(service) {
   if (service.paymentInstructions) return service.paymentInstructions;
   if (service.requiresDeposit && businessPaymentAlias) {
-    return `Transferi la seña al alias: ${businessPaymentAlias}`;
+    return `Transferi la sena al alias: ${businessPaymentAlias}`;
   }
   return "";
 }
@@ -159,14 +161,31 @@ function formatPrice(price) {
   return `$${price.toLocaleString("es-AR")}`;
 }
 
+function getInitials(name) {
+  return String(name || "M")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "M";
+}
+
+function serviceMetaLabel(service) {
+  const parts = [];
+  if (service.durationMinutes) parts.push(`${service.durationMinutes} min`);
+  parts.push(service.requiresDeposit ? "Requiere sena" : "Sin sena");
+  return parts.join(" · ");
+}
+
 function statusLabel(status) {
   const labels = {
-    pendiente: "Pendiente de seña",
+    pendiente: "Pendiente de sena",
     reservado: "Reservado",
     confirmado: "Confirmado",
     cancelado: "Cancelado",
-    asistio: "Asistió",
-    no_asistio: "No asistió",
+    asistio: "Asistio",
+    no_asistio: "No asistio",
   };
   return labels[status] || status;
 }
@@ -177,7 +196,7 @@ function renderCancelResults(reservations, customerName, customerPhone) {
     cancelSearchResults.innerHTML = `
       <div class="admin-empty">
         <strong>No encontramos un turno activo con esos datos.</strong>
-        <p>Revisá el nombre y teléfono ingresados o comunicate directamente con el negocio.</p>
+        <p>Revisa el nombre y telefono ingresados o comunicate directamente con el negocio.</p>
       </div>
     `;
     return;
@@ -189,7 +208,7 @@ function renderCancelResults(reservations, customerName, customerPhone) {
         <strong>${escapeHtml(reservation.serviceName)} con ${escapeHtml(reservation.professionalName)}</strong>
         <span>${escapeHtml(formatDateLabel(reservation.date))} a las ${escapeHtml(reservation.time)}</span>
         <small>${escapeHtml(statusLabel(reservation.status))}</small>
-        ${reservation.depositWarning ? `<p class="deposit-note">Este turno tiene seña registrada. Si cancelás con menos de 24 horas de anticipación, la seña podría no ser reintegrable según la política del negocio.</p>` : ""}
+        ${reservation.depositWarning ? `<p class="deposit-note">Este turno tiene sena registrada. Si cancelas con menos de 24 horas de anticipacion, la sena podria no ser reintegrable segun la politica del negocio.</p>` : ""}
       </div>
       <button class="danger-button" type="button" data-public-cancel="${reservation.id}" data-name="${escapeHtml(customerName)}" data-phone="${escapeHtml(customerPhone)}" ${reservation.canCancel ? "" : "disabled"}>Cancelar turno</button>
     </article>
@@ -206,7 +225,8 @@ function renderProgress() {
   progress.innerHTML = labels
     .map((label, index) => {
       const step = index + 1;
-      return `<span class="${step <= state.step ? "active" : ""}"><b>${step}</b><small>${label}</small></span>`;
+      const className = step < state.step ? "done" : step === state.step ? "active" : "pending";
+      return `<span class="${className}"><b>${step < state.step ? "OK" : step}</b><small>${label}</small></span>`;
     })
     .join("");
 }
@@ -228,15 +248,21 @@ function renderLayout(title, subtitle, assistantMessage, content) {
 
 function renderServices() {
   renderLayout(
-    "Reserva tu turno en pocos pasos",
-    "Elegi el servicio que necesitas",
+    "Reserva tu turno",
+    "Elegi el servicio que queres realizar. Te mostraremos los horarios disponibles.",
     "Primero elegi que necesitas.",
-    `<div class="choice-grid">${services.map((service) => `
-      <button class="choice-card" type="button" data-service="${escapeHtml(service.id)}">
-        <strong>${escapeHtml(service.name)}</strong>
-        <span>${service.durationMinutes ? `${service.durationMinutes} min` : "Duracion a confirmar"}</span>
-        ${service.price !== null ? `<small>${escapeHtml(formatPrice(service.price))}</small>` : ""}
-        ${service.requiresDeposit ? `<small class="deposit-note">Requiere seña</small>` : ""}
+    `<div class="choice-grid service-grid">${services.map((service) => `
+      <button class="choice-card service-card" type="button" data-service="${escapeHtml(service.id)}">
+        <span class="choice-avatar">${escapeHtml(service.name.charAt(0) || "S")}</span>
+        <span class="choice-main">
+          <strong>${escapeHtml(service.name)}</strong>
+          <small>${escapeHtml(serviceMetaLabel(service))}</small>
+          ${service.requiresDeposit ? `<em class="deposit-note">Sena: ${escapeHtml(formatPrice(service.depositAmount))}</em>` : ""}
+        </span>
+        <span class="choice-side">
+          ${service.price !== null ? `<strong>${escapeHtml(formatPrice(service.price))}</strong>` : `<strong>Consultar</strong>`}
+          <small>Elegir</small>
+        </span>
       </button>
     `).join("")}</div>`,
   );
@@ -245,18 +271,24 @@ function renderServices() {
 function renderProfessionals() {
   const available = getProfessionalsForService();
   renderLayout(
-    "Ahora elegi con quien queres atenderte",
-    "Tambien podes elegir cualquiera disponible",
+    "Elegi tu profesional",
+    "Podes reservar con alguien especifico o dejar que te asignemos el primer horario disponible.",
     "Podes elegir un profesional o dejar que el sistema busque uno disponible.",
-    `<div class="choice-grid">
-      <button class="choice-card" type="button" data-professional-mode="any">
-        <strong>Cualquiera disponible</strong>
-        <span>Asignamos automaticamente un profesional libre.</span>
+    `<div class="choice-grid professional-grid">
+      <button class="choice-card professional-card" type="button" data-professional-mode="any">
+        <span class="pro-avatar any">+</span>
+        <span class="choice-main">
+          <strong>Cualquiera disponible</strong>
+          <small>Primer profesional libre</small>
+        </span>
       </button>
       ${available.map((professional) => `
-        <button class="choice-card" type="button" data-professional="${professional.id}">
-          <strong>${escapeHtml(professional.name)}</strong>
-          <span>Ver sus horarios disponibles</span>
+        <button class="choice-card professional-card" type="button" data-professional="${professional.id}">
+          <span class="pro-avatar">${escapeHtml(getInitials(professional.name))}</span>
+          <span class="choice-main">
+            <strong>${escapeHtml(professional.name)}</strong>
+            <small>Ver horarios disponibles</small>
+          </span>
         </button>
       `).join("")}
     </div>
@@ -268,16 +300,21 @@ function renderDateTime() {
   const dates = getAvailableDates();
   const times = state.date ? getAvailableTimes(state.date) : [];
   renderLayout(
-    "Estos son los horarios disponibles",
-    "Elegi una fecha y despues el horario que prefieras",
+    "Cuando te queda comodo?",
+    "Selecciona el dia y horario que prefieras.",
     "Estos son los horarios libres para vos.",
-    `<div class="date-strip">
+    `<div class="calendar-panel">
+      <div class="calendar-title">Proximos dias disponibles</div>
+      <div class="date-strip">
       ${dates.map((date) => `
         <button class="${state.date?.date === date.date ? "selected" : ""}" type="button" data-date="${date.date}">
-          ${escapeHtml(date.label)}
+          <small>${escapeHtml(date.label.split(" ")[0])}</small>
+          <strong>${escapeHtml(date.label.replace(/^[^ ]+\s/, ""))}</strong>
         </button>
       `).join("") || "<p>No hay fechas disponibles por ahora.</p>"}
+      </div>
     </div>
+    <div class="time-title">${state.date ? `Horarios para ${escapeHtml(state.date.label)}` : "Elegi un dia para ver horarios"}</div>
     <div class="time-grid">
       ${times.map((time) => `<button type="button" data-time="${time}">${time}</button>`).join("")}
     </div>
@@ -290,10 +327,10 @@ function renderCustomer() {
   const paymentInstructions = servicePaymentInstructions(state.service);
   const depositInfo = state.service.requiresDeposit
     ? `<div class="deposit-box">
-        <strong>Este turno requiere una seña para quedar confirmado.</strong>
-        <span>Seña: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
+        <strong>Este servicio requiere una sena para confirmar la reserva.</strong>
+        <span>Monto de sena: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
         ${paymentInstructions ? `<span>${escapeHtml(paymentInstructions)}</span>` : ""}
-        <small>Tu turno quedara pendiente hasta que el negocio confirme la recepcion.</small>
+        <small>Una vez realizada la reserva te enviaremos los datos de pago por WhatsApp. Tu turno quedara pendiente hasta registrar la sena.</small>
       </div>`
     : "";
   renderLayout(
@@ -311,9 +348,10 @@ function renderCustomer() {
       </label>
       <div class="summary-box">
         <strong>Resumen</strong>
-        <span>${escapeHtml(state.service.name)} con ${escapeHtml(professionalName)}</span>
-        <span>${escapeHtml(state.date.label)} a las ${escapeHtml(state.time)}</span>
-        <span>${escapeHtml(state.customerName || "Tu nombre")} - ${escapeHtml(state.customerPhone || "Tu WhatsApp")}</span>
+        <span><b>Servicio</b> ${escapeHtml(state.service.name)}</span>
+        <span><b>Profesional</b> ${escapeHtml(professionalName)}</span>
+        <span><b>Fecha</b> ${escapeHtml(state.date.label)} a las ${escapeHtml(state.time)}</span>
+        ${state.service.price !== null ? `<span><b>Precio</b> ${escapeHtml(formatPrice(state.service.price))}</span>` : ""}
       </div>
       ${depositInfo}
       <p class="form-error" id="form-error" hidden>Completa nombre y telefono para confirmar.</p>
@@ -325,24 +363,26 @@ function renderCustomer() {
 
 function renderSuccess() {
   const paymentInstructions = servicePaymentInstructions(state.service);
-  const depositMessage = `Hola, hice una reserva en ${businessName} para el dia ${state.date.label} a las ${state.time}. Te envio el comprobante de la seña.`;
+  const depositMessage = `Hola, hice una reserva en ${businessName} para el dia ${state.date.label} a las ${state.time}. Te envio el comprobante de la sena.`;
   const whatsappLink = buildWhatsappLink(businessPhone, depositMessage, "3549");
   if (state.service.requiresDeposit) {
     progress.innerHTML = "";
     root.innerHTML = `
       <div class="success-screen">
+        <div class="success-icon">OK</div>
         <p>Reserva recibida</p>
-        <h2>✓ Tu turno quedó pendiente de seña</h2>
-        <span>Te esperamos en ${escapeHtml(businessName)}. Para confirmarlo, enviá el comprobante al negocio.</span>
+        <h2>Tu turno quedo registrado</h2>
+        <span>Ahora te enviaremos por WhatsApp la informacion necesaria para completar la sena y confirmar la reserva.</span>
         <div class="summary-box">
-          <strong>${escapeHtml(state.service.name)}</strong>
+          <strong>${escapeHtml(businessName)}</strong>
+          <span>Servicio: ${escapeHtml(state.service.name)}</span>
           <span>Profesional: ${escapeHtml(state.assignedProfessionalName)}</span>
           <span>Fecha: ${escapeHtml(state.date.label)}</span>
           <span>Horario: ${escapeHtml(state.time)}</span>
-          <span>Seña: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
+          <span>Sena: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
           ${paymentInstructions ? `<span>${escapeHtml(paymentInstructions)}</span>` : ""}
         </div>
-        ${whatsappLink ? `<a class="primary-button link-button" href="${whatsappLink}" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>` : ""}
+        ${whatsappLink ? `<a class="primary-button link-button whatsapp-button" href="${whatsappLink}" target="_blank" rel="noopener">Escribir al negocio</a>` : ""}
         ${state.cancelUrl ? `<a class="text-button link-button" href="${escapeHtml(state.cancelUrl)}">Cancelar turno</a>` : ""}
         <button class="primary-button" type="button" data-restart>Reservar otro turno</button>
       </div>
@@ -353,17 +393,19 @@ function renderSuccess() {
   progress.innerHTML = "";
   root.innerHTML = `
     <div class="success-screen">
+      <div class="success-icon">OK</div>
       <p>Listo</p>
-      <h2>✓ Tu turno fue reservado correctamente</h2>
-      <span>Te esperamos en ${escapeHtml(businessName)}.</span>
+      <h2>Tu turno quedo registrado correctamente</h2>
+      <span>En unos instantes recibiras la confirmacion por WhatsApp con todos los detalles. Te esperamos.</span>
       <div class="summary-box">
-        <strong>${escapeHtml(state.service.name)}</strong>
+        <strong>${escapeHtml(businessName)}</strong>
+        <span>Servicio: ${escapeHtml(state.service.name)}</span>
         <span>Profesional: ${escapeHtml(state.assignedProfessionalName)}</span>
         <span>Fecha: ${escapeHtml(state.date.label)}</span>
         <span>Horario: ${escapeHtml(state.time)}</span>
         <span>${escapeHtml(state.customerName)} - ${escapeHtml(state.customerPhone)}</span>
       </div>
-      <span>Si necesitás modificar o cancelar tu turno podés comunicarte con nosotros por WhatsApp.</span>
+      ${businessPhone ? `<a class="primary-button link-button whatsapp-button" href="${buildWhatsappLink(businessPhone, `Hola, tengo una reserva en ${businessName} para el dia ${state.date.label} a las ${state.time}.`, "3549")}" target="_blank" rel="noopener">Escribir al negocio</a>` : ""}
       ${state.cancelUrl ? `<a class="text-button link-button" href="${escapeHtml(state.cancelUrl)}">Cancelar turno</a>` : ""}
       <button class="primary-button" type="button" data-restart>Reservar otro turno</button>
     </div>
@@ -483,8 +525,8 @@ root.addEventListener("submit", async (event) => {
       const error = form.querySelector("#form-error");
       error.hidden = false;
       error.textContent = phone.error === "missing_area_code"
-        ? "Ingresá el número con código de área. Ejemplo: 3549432877."
-        : "Ingresá un WhatsApp válido.";
+        ? "Ingresa el numero con codigo de area. Ejemplo: 3549432877."
+        : "Ingresa un WhatsApp valido.";
       return;
     }
     state.customerPhone = phone.normalized;
@@ -519,8 +561,8 @@ if (cancelSearchForm) {
     if (!customerName || !phone.ok) {
       cancelSearchError.hidden = false;
       cancelSearchError.textContent = phone.error === "missing_area_code"
-        ? "Ingresá el número con código de área. Ejemplo: 3549432877."
-        : "Ingresá nombre y WhatsApp válidos.";
+        ? "Ingresa el numero con codigo de area. Ejemplo: 3549432877."
+        : "Ingresa nombre y WhatsApp validos.";
       return;
     }
 
@@ -544,7 +586,7 @@ if (cancelSearchResults) {
   cancelSearchResults.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-public-cancel]");
     if (!button) return;
-    if (!window.confirm("¿Confirmás que querés cancelar este turno?")) return;
+    if (!window.confirm("Confirmas que queres cancelar este turno?")) return;
 
     const response = await fetch(`${BUSINESS_API_URL}/cancellations/${button.dataset.publicCancel}`, {
       method: "POST",
@@ -560,7 +602,7 @@ if (cancelSearchResults) {
       return;
     }
 
-    cancelSearchResults.innerHTML = `<div class="success-screen"><h2>Tu turno fue cancelado correctamente.</h2><span>Gracias por avisarnos con anticipación.</span></div>`;
+    cancelSearchResults.innerHTML = `<div class="success-screen"><h2>Tu turno fue cancelado correctamente.</h2><span>Gracias por avisarnos con anticipacion.</span></div>`;
   });
 }
 
@@ -577,11 +619,17 @@ async function init() {
     businessAddress = business.address || "";
     businessPaymentAlias = business.paymentAlias || business.payment_alias || "";
     businessNameElement.textContent = businessName;
+    if (businessAvatarElement) businessAvatarElement.textContent = getInitials(businessName);
     assistantTitleElement.textContent = `Hola, soy el asistente de turnos de ${businessName}.`;
     assistantMessageElement.textContent = "Te ayudo a reservar en pocos pasos.";
     const meta = [business.category, business.city, businessAddress].filter(Boolean).join(" - ");
     businessMetaElement.textContent = meta;
     businessMetaElement.hidden = !meta;
+    if (businessLocationPillElement) {
+      const location = businessAddress || business.city || "";
+      businessLocationPillElement.textContent = location ? location : "";
+      businessLocationPillElement.hidden = !location;
+    }
     document.title = `${businessName} - Reservar turno`;
 
     const [servicesResponse, professionalsResponse] = await Promise.all([
