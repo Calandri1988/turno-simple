@@ -3061,18 +3061,39 @@ body {
 
 .pro-avatar {
   border-radius: 50%;
-  background: var(--brand-primary);
+  background: linear-gradient(135deg, var(--brand-primary-dark), var(--brand-primary));
   color: #fff;
-  border: 2px solid rgba(75, 68, 204, 0.24);
+  border: 2px solid rgba(255, 255, 255, 0.95);
   font-weight: 900;
-  box-shadow: 0 8px 18px rgba(99, 91, 255, 0.22);
+  text-shadow: 0 1px 1px rgba(15, 23, 42, 0.28);
+  box-shadow:
+    0 0 0 3px rgba(99, 91, 255, 0.24),
+    0 10px 22px rgba(99, 91, 255, 0.28);
 }
 
 .pro-avatar.any {
-  background: #0F172A;
+  background: linear-gradient(135deg, #0F172A, #26344F);
   color: #FFFFFF;
-  border-color: rgba(15, 23, 42, 0.28);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
+  border-color: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 0 0 3px rgba(15, 23, 42, 0.18),
+    0 10px 22px rgba(15, 23, 42, 0.24);
+}
+
+.public-page .choice-card .pro-avatar,
+.public-page .choice-card .pro-avatar.any {
+  color: #fff;
+}
+
+.public-page .professional-card:hover .pro-avatar,
+.public-page .professional-card:focus-visible .pro-avatar {
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-primary-dark), #2F2AA8);
+}
+
+.public-page .professional-card:hover .pro-avatar.any,
+.public-page .professional-card:focus-visible .pro-avatar.any {
+  background: linear-gradient(135deg, #020617, #1E293B);
 }
 
 .choice-main {
@@ -3252,8 +3273,142 @@ body {
   padding: 16px;
 }
 
+.public-page .cancellation-card {
+  overflow: hidden;
+  padding: 0;
+}
+
+.public-page .cancellation-card .step-copy {
+  padding: 18px 18px 0;
+}
+
+.public-page .cancellation-card .wizard-form {
+  padding: 16px 18px 18px;
+}
+
+.public-page .cancellation-card .secondary-button {
+  min-height: 48px;
+  border-color: rgba(99, 91, 255, 0.24);
+  border-radius: var(--radius-sm);
+  background: var(--brand-primary-light);
+  color: var(--brand-primary-dark);
+  font-weight: 900;
+}
+
+.public-page .cancel-results {
+  display: grid;
+  gap: 12px;
+  padding: 0 18px 18px;
+}
+
+.cancel-empty-card,
+.cancel-booking-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
+}
+
+.cancel-empty-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.cancel-empty-card strong,
+.cancel-booking-main strong {
+  color: var(--text-main);
+}
+
+.cancel-empty-card p,
+.cancel-booking-main small {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.cancel-booking-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.cancel-booking-main {
+  display: grid;
+  gap: 5px;
+}
+
+.cancel-status-pill {
+  width: fit-content;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--brand-primary-light);
+  color: var(--brand-primary-dark);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.cancel-booking-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cancel-booking-details span {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: #f8fafc;
+  color: var(--text-main);
+  font-weight: 900;
+}
+
+.cancel-booking-details b {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+}
+
+.cancel-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: var(--radius-sm);
+  background: #fff7ed;
+  color: #9a4b05;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.public-page .cancel-booking-button {
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+}
+
 .public-page .faq-list details {
   border-radius: var(--radius-md);
+}
+
+@media (min-width: 768px) {
+  .public-page .wizard-shell {
+    width: min(100%, 760px);
+  }
+
+  .public-page .booking-hero {
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .public-page .assistant-card,
+  .public-page .wizard-card,
+  .public-page .faq-section {
+    max-width: 580px;
+    margin-left: auto;
+    margin-right: auto;
+  }
 }
 
 @media (max-width: 520px) {
@@ -3426,6 +3581,41 @@ body {
 .admin-page .admin-login-card h2 {
   color: var(--text-main);
   font-size: clamp(1.35rem, 3vw, 1.8rem);
+}
+
+.admin-page .admin-login-card {
+  width: min(100%, 420px);
+  margin: 0 auto;
+  padding: 22px;
+  align-self: start;
+}
+
+.admin-page .admin-login-card h2 {
+  margin-bottom: 6px;
+  font-size: clamp(1.4rem, 3vw, 1.75rem);
+}
+
+.admin-page .admin-login-card p {
+  max-width: 32ch;
+  margin-bottom: 14px;
+  line-height: 1.45;
+}
+
+.admin-page .admin-login-card .wizard-form {
+  gap: 10px;
+}
+
+.admin-page .admin-login-card label {
+  gap: 5px;
+}
+
+.admin-page .admin-login-card input {
+  min-height: 42px;
+  border-radius: var(--radius-sm);
+}
+
+.admin-page .admin-login-card .primary-button {
+  min-height: 44px;
 }
 
 .admin-page .admin-section p {

@@ -205,7 +205,7 @@ function serviceMetaLabel(service) {
   const parts = [];
   if (service.durationMinutes) parts.push(`${service.durationMinutes} min`);
   parts.push(service.requiresDeposit ? "Requiere sena" : "Sin sena");
-  return parts.join(" · ");
+  return parts.join(" - ");
 }
 
 function statusLabel(status) {
@@ -224,23 +224,27 @@ function renderCancelResults(reservations, customerName, customerPhone) {
   if (!cancelSearchResults) return;
   if (reservations.length === 0) {
     cancelSearchResults.innerHTML = `
-      <div class="admin-empty">
-        <strong>No encontramos un turno activo con esos datos.</strong>
-        <p>Revisa el nombre y telefono ingresados o comunicate directamente con el negocio.</p>
+      <div class="cancel-empty-card">
+        <strong>No encontramos turnos activos con esos datos.</strong>
+        <p>Revisa que el nombre y el WhatsApp esten escritos igual que al reservar.</p>
       </div>
     `;
     return;
   }
 
   cancelSearchResults.innerHTML = reservations.map((reservation) => `
-    <article class="agenda-row cancel-result-card">
-      <div>
-        <strong>${escapeHtml(reservation.serviceName)} con ${escapeHtml(reservation.professionalName)}</strong>
-        <span>${escapeHtml(formatDateLabel(reservation.date))} a las ${escapeHtml(reservation.time)}</span>
-        <small>${escapeHtml(statusLabel(reservation.status))}</small>
-        ${reservation.depositWarning ? `<p class="deposit-note">Este turno tiene sena registrada. Si cancelas con menos de 24 horas de anticipacion, la sena podria no ser reintegrable segun la politica del negocio.</p>` : ""}
+    <article class="cancel-booking-card">
+      <div class="cancel-booking-main">
+        <span class="cancel-status-pill">${escapeHtml(statusLabel(reservation.status))}</span>
+        <strong>${escapeHtml(reservation.serviceName)}</strong>
+        <small>Con ${escapeHtml(reservation.professionalName)}</small>
       </div>
-      <button class="danger-button" type="button" data-public-cancel="${reservation.id}" data-name="${escapeHtml(customerName)}" data-phone="${escapeHtml(customerPhone)}" ${reservation.canCancel ? "" : "disabled"}>Cancelar turno</button>
+      <div class="cancel-booking-details">
+        <span><b>Fecha</b>${escapeHtml(formatDateLabel(reservation.date))}</span>
+        <span><b>Horario</b>${escapeHtml(reservation.time)}</span>
+      </div>
+      ${reservation.depositWarning ? `<p class="cancel-warning">Este turno tiene sena registrada. Si cancelas con menos de 24 horas de anticipacion, la sena podria no ser reintegrable segun la politica del negocio.</p>` : ""}
+      <button class="danger-button cancel-booking-button" type="button" data-public-cancel="${reservation.id}" data-name="${escapeHtml(customerName)}" data-phone="${escapeHtml(customerPhone)}" ${reservation.canCancel ? "" : "disabled"}>Cancelar turno</button>
     </article>
   `).join("");
 }
