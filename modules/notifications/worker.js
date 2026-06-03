@@ -8,12 +8,15 @@ let isWorkerStarted = false;
 const POLL_INTERVAL_MS = 30_000;
 const BATCH_SIZE = 20;
 const MAX_ATTEMPTS = 3;
+const META_TEMPLATE_BY_NOTIFICATION_TYPE = {
+  booking_cancelled: "booking_cancelled_v2",
+};
 const REAL_WHATSAPP_TEMPLATES = new Set([
   "booking_confirmed",
   "booking_payment_request",
   "booking_payment_confirmed",
   "booking_reminder_24h",
-  "booking_cancelled",
+  "booking_cancelled_v2",
 ]);
 
 function configureWorkerDatabase(database) {
@@ -31,9 +34,15 @@ function isWhatsAppEnabled() {
   return process.env.WHATSAPP_ENABLED === "true";
 }
 
+function getMetaTemplateName(notificationType) {
+  return META_TEMPLATE_BY_NOTIFICATION_TYPE[notificationType] || notificationType;
+}
+
 function extractCancelledFallbackParameters(message) {
   const text = String(message || "");
-  const match = text.match(/¡?Hola\s+(.+?)!\s*.*?turno para\s+(.+?)\s+en\s+(.+?),\s+programado para el día\s+(\d{2}\/\d{2}\/\d{4})\s+a las\s+(\d{2}:\d{2}).*?al\s+(.+?)\./is);
+  const match = text.match(
+    /(?:¡|Â¡)?Hola\s+(.+?)!\s*.*?turno para\s+(.+?)\s+en\s+(.+?),\s+programado para el (?:día|dÃ­a)\s+(\d{2}\/\d{2}\/\d{4})\s+a las\s+(\d{2}:\d{2}).*?al\s+(.+?)\./is,
+  );
   if (!match) {
     return null;
   }
@@ -71,7 +80,7 @@ async function buildWhatsAppTemplatePayload(database, notification) {
       const parameters = extractCancelledFallbackParameters(notification.message);
       if (parameters) {
         console.warn(`[notifications/worker] Using fallback template parameters for deleted booking id=${notification.booking_id}`);
-        return { template: notification.type, parameters };
+        return { template: getMetaTemplateName(notification.type), parameters };
       }
     }
     throw new Error(`Cannot build WhatsApp template parameters for notification ${notification.id}`);
@@ -115,7 +124,7 @@ async function buildWhatsAppTemplatePayload(database, notification) {
 
   if (notification.type === "booking_cancelled") {
     return {
-      template: notification.type,
+      template: getMetaTemplateName(notification.type),
       parameters: [
         booking.customer_name,
         booking.service_name,
@@ -128,7 +137,7 @@ async function buildWhatsAppTemplatePayload(database, notification) {
   }
 
   return {
-    template: notification.type,
+    template: getMetaTemplateName(notification.type),
     parameters: [],
   };
 }
@@ -144,14 +153,17 @@ async function deliverNotification(database, notification) {
     return;
   }
 
-  if (!REAL_WHATSAPP_TEMPLATES.has(notification.type)) {
-    console.log(`[notifications/worker] skipped real WhatsApp: template not approved (${notification.type})`);
+  const metaTemplate = getMetaTemplateName(notification.type);
+
+  if (!REAL_WHATSAPP_TEMPLATES.has(metaTemplate)) {
+    console.log(`[notifications/worker] skipped real WhatsApp: template not approved (${metaTemplate})`);
     return;
   }
 
   console.log(`[notifications/worker] SEND [${notification.channel.toUpperCase()}]`);
   console.log(`  -> To: ${notification.recipient}`);
   console.log(`  -> Type: ${notification.type}`);
+  console.log(`  -> Meta template: ${metaTemplate}`);
 
   const payload = await buildWhatsAppTemplatePayload(database, notification);
   await sendWhatsApp({
@@ -238,6 +250,7 @@ module.exports = {
   buildWhatsAppTemplatePayload,
   configureWorkerDatabase,
   deliverNotification,
+  getMetaTemplateName,
   isWhatsAppEnabled,
   processPendingNotifications,
   startWorker,

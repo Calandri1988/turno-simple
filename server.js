@@ -843,6 +843,7 @@ function buildApprovedTemplateTestParameters(template, business) {
     booking_payment_request: ["Cliente Prueba", "Coloración", "8000", business.payment_alias || "alias.demo.mp"],
     booking_payment_confirmed: ["Cliente Prueba", "Coloración", "01/06/2026", "10:00"],
     booking_reminder_24h: ["Cliente Prueba", "Corte clásico", "01/06/2026", "10:00", businessReference],
+    booking_cancelled_v2: ["Cliente Prueba", "Corte clásico", business.name || "el negocio", "01/06/2026", "10:00", business.whatsapp || "el negocio"],
   };
   return samples[template] || null;
 }
@@ -861,7 +862,7 @@ async function enqueueBookingCancelledNotification(business, booking, req) {
   console.log("[notifications] booking_cancelled baseUrl=", getPublicBaseUrl(req));
   console.log("[notifications] booking_cancelled bookingUrl=", bookingUrl);
 
-  const cancelled = renderTemplate("booking_cancelled", {
+  const cancelled = renderTemplate("booking_cancelled_v2", {
     client_name: booking.customer_name,
     service: booking.service_name,
     business_name: business.name || "el negocio",

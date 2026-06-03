@@ -86,8 +86,8 @@ test("sendWhatsApp usa endpoint oficial y no loguea token", async () => {
 
   const result = await sendWhatsApp({
     to: "+5493549558019",
-    template: "booking_cancelled",
-    parameters: ["Juan", "Corte", "03/06/2026"],
+    template: "booking_cancelled_v2",
+    parameters: ["Juan", "Corte", "Barbería Central", "03/06/2026", "10:00", "3549432877"],
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
       return {
@@ -101,7 +101,9 @@ test("sendWhatsApp usa endpoint oficial y no loguea token", async () => {
   assert.equal(result.ok, true);
   assert.equal(calls[0].url, "https://graph.facebook.com/v25.0/1115702228296745/messages");
   assert.equal(calls[0].options.headers.Authorization, "Bearer TOKEN_SECRETO");
-  assert.equal(JSON.parse(calls[0].options.body).to, "5493549558019");
+  const body = JSON.parse(calls[0].options.body);
+  assert.equal(body.to, "5493549558019");
+  assert.equal(body.template.name, "booking_cancelled_v2");
 });
 
 test("sendWhatsApp valida variables requeridas", async () => {
@@ -251,6 +253,7 @@ test("buildWhatsAppTemplatePayload usa variables aprobadas por plantilla", async
   assert.deepEqual(paymentRequest.parameters, ["Ana", "Coloración", 8000, "barberia.central.mp"]);
   assert.deepEqual(paymentConfirmed.parameters, ["Ana", "Coloración", "08/06/2026", "10:00"]);
   assert.deepEqual(reminder.parameters, ["Ana", "Coloración", "08/06/2026", "10:00", "Centro - Cruz del Eje"]);
+  assert.equal(cancelled.template, "booking_cancelled_v2");
   assert.deepEqual(cancelled.parameters, ["Ana", "Coloración", "Barbería Central", "08/06/2026", "10:00", "3549432877"]);
 });
 
