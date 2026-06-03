@@ -15,6 +15,7 @@ const BUSINESS_SLUG = parts[0] || "demo";
 const BUSINESS_API_URL = `/api/businesses/${BUSINESS_SLUG}`;
 
 const weekdayLabels = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
+const BUSINESS_TIME_ZONE = "America/Argentina/Buenos_Aires";
 const services = [];
 const professionals = [];
 let businessName = "Momentia";
@@ -54,6 +55,30 @@ function toIsoDate(date) {
 function parseIsoDate(value) {
   const [year, month, day] = String(value).split("-").map(Number);
   return new Date(year, month - 1, day);
+}
+
+function getArgentinaNowParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: `${values.year}-${values.month}-${values.day}`,
+    minutes: Number(values.hour) * 60 + Number(values.minute),
+  };
+}
+
+function filterExpiredTimesForDate(times, date) {
+  const now = getArgentinaNowParts();
+  if (!date || date.date !== now.date) return times;
+  return times.filter((time) => timeToMinutes(time) > now.minutes);
 }
 
 function formatDateLabel(value) {
@@ -143,6 +168,11 @@ function getAvailableTimesForAny(date) {
 }
 
 function getAvailableTimes(date) {
+  const times = getRawAvailableTimes(date);
+  return filterExpiredTimesForDate(times, date);
+}
+
+function getRawAvailableTimes(date) {
   return state.professionalMode === "any"
     ? getAvailableTimesForAny(date)
     : getAvailableTimesForProfessional(state.professional, date);
@@ -299,6 +329,12 @@ function renderProfessionals() {
 function renderDateTime() {
   const dates = getAvailableDates();
   const times = state.date ? getAvailableTimes(state.date) : [];
+  const today = getArgentinaNowParts().date;
+  const todayDate = getNextDates(1)[0];
+  const todayExpired = todayDate.date === today
+    && getRawAvailableTimes(todayDate).length > 0
+    && getAvailableTimes(todayDate).length === 0;
+  const selectedTodayWithoutTimes = state.date?.date === today && times.length === 0;
   renderLayout(
     "Cuando te queda comodo?",
     "Selecciona el dia y horario que prefieras.",
@@ -314,10 +350,12 @@ function renderDateTime() {
       `).join("") || "<p>No hay fechas disponibles por ahora.</p>"}
       </div>
     </div>
+    ${todayExpired && !selectedTodayWithoutTimes ? `<p class="time-empty-message">No quedan horarios disponibles para hoy. Elegi otra fecha para reservar.</p>` : ""}
     <div class="time-title">${state.date ? `Horarios para ${escapeHtml(state.date.label)}` : "Elegi un dia para ver horarios"}</div>
     <div class="time-grid">
       ${times.map((time) => `<button type="button" data-time="${time}">${time}</button>`).join("")}
     </div>
+    ${selectedTodayWithoutTimes ? `<p class="time-empty-message">No quedan horarios disponibles para hoy. Elegi otra fecha para reservar.</p>` : ""}
     <button class="text-button" type="button" data-back="2">Volver</button>`,
   );
 }

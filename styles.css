@@ -3063,11 +3063,16 @@ body {
   border-radius: 50%;
   background: var(--brand-primary);
   color: #fff;
+  border: 2px solid rgba(75, 68, 204, 0.24);
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(99, 91, 255, 0.22);
 }
 
 .pro-avatar.any {
-  background: var(--brand-accent-light);
-  color: #0f6e56;
+  background: #0F172A;
+  color: #FFFFFF;
+  border-color: rgba(15, 23, 42, 0.28);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
 }
 
 .choice-main {
@@ -3121,6 +3126,17 @@ body {
   color: var(--text-muted);
   font-size: 0.86rem;
   font-weight: 900;
+}
+
+.time-empty-message {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #fed7aa;
+  border-radius: var(--radius-md);
+  background: #fff7ed;
+  color: #9a4b05;
+  font-weight: 800;
+  line-height: 1.4;
 }
 
 .public-page .date-strip {
