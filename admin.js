@@ -170,6 +170,43 @@ async function sendJson(url, method, body) {
   return response.status === 204 ? null : response.json();
 }
 
+async function createManualBooking(form, data) {
+  const errorElement = form.querySelector(".form-error");
+  if (errorElement) {
+    errorElement.hidden = true;
+    errorElement.textContent = "";
+  }
+
+  const response = await fetch(`${BUSINESS_API_URL}/reservations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      serviceId: data.serviceId,
+      professionalId: data.professionalId,
+      date: data.date,
+      time: data.time,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No pudimos crear el turno.");
+  }
+
+  form.reset();
+  await loadReservationData();
+  await refresh();
+  const notice = root.querySelector("[data-admin-notice]");
+  if (notice) {
+    notice.textContent = payload.notificationWarning
+      ? "Turno creado correctamente. No fue posible enviar la notificacion por WhatsApp."
+      : "Turno creado correctamente.";
+    notice.hidden = false;
+  }
+}
+
 async function readErrorMessage(response) {
   try {
     const data = await response.json();
@@ -199,6 +236,78 @@ function getReservationDepositAmount(reservation) {
   const service = findServiceForReservation(reservation);
   if (!service) return 0;
   return Number(service.depositAmount) || 0;
+}
+
+function adminTimeToMinutes(time) {
+  const [hours, minutes] = String(time || "").split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function adminMinutesToTime(totalMinutes) {
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
+}
+
+function getWeekdayFromIsoDate(value) {
+  return parseIsoDate(value).getDay();
+}
+
+function reservationRangesOverlap(start, end, reservation) {
+  const reservedStart = adminTimeToMinutes(reservation.time);
+  const service = findServiceForReservation(reservation);
+  const reservedDuration = service?.durationMinutes || 30;
+  const reservedEnd = reservedStart + reservedDuration;
+  return start < reservedEnd && reservedStart < end;
+}
+
+function getManualBookingTimes(serviceId, professionalId, date) {
+  const service = services.find((item) => item.id === serviceId);
+  const professional = professionals.find((item) => String(item.id) === String(professionalId));
+  if (!service || !professional || !date) return [];
+
+  const duration = service.durationMinutes || 0;
+  const weekday = getWeekdayFromIsoDate(date);
+  const blocked = allReservations.filter((reservation) => (
+    reservation.date === date
+    && Number(reservation.professionalId) === Number(professional.id)
+  ));
+
+  const times = schedules
+    .filter((schedule) => Number(schedule.professionalId) === Number(professional.id) && schedule.weekday === weekday)
+    .flatMap((schedule) => {
+      const start = adminTimeToMinutes(schedule.startTime);
+      const end = adminTimeToMinutes(schedule.endTime);
+      const generated = [];
+      for (let current = start; current + duration <= end; current += schedule.intervalMinutes) {
+        const time = adminMinutesToTime(current);
+        const overlaps = blocked.some((reservation) => reservationRangesOverlap(current, current + duration, reservation));
+        if (!overlaps) generated.push(time);
+      }
+      return generated;
+    });
+
+  const today = toIsoDate(new Date());
+  const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+  return [...new Set(times)]
+    .filter((time) => date !== today || adminTimeToMinutes(time) > nowMinutes)
+    .sort();
+}
+
+function updateManualBookingTimes() {
+  const form = root.querySelector("[data-form='manual-booking']");
+  if (!form) return;
+  const timeSelect = form.querySelector("select[name='time']");
+  const depositHint = form.querySelector("[data-manual-deposit-hint]");
+  const service = services.find((item) => item.id === form.serviceId.value);
+  const times = getManualBookingTimes(form.serviceId.value, form.professionalId.value, form.date.value);
+  timeSelect.innerHTML = times.length
+    ? times.map((time) => `<option value="${time}">${time}</option>`).join("")
+    : `<option value="">No hay horarios disponibles</option>`;
+  timeSelect.disabled = times.length === 0;
+  if (depositHint) {
+    depositHint.textContent = service?.requiresDeposit
+      ? `Este servicio quedara pendiente de sena (${formatPrice(service.depositAmount)}).`
+      : "Este turno se creara como confirmado.";
+  }
 }
 
 function getFilteredAgendaItems() {
@@ -647,6 +756,57 @@ function renderCopyTools(items) {
   `;
 }
 
+function renderManualBooking() {
+  const today = toIsoDate(new Date());
+  const selectedService = services[0] || null;
+  const selectedProfessional = professionals[0] || null;
+  const times = selectedService && selectedProfessional
+    ? getManualBookingTimes(selectedService.id, selectedProfessional.id, today)
+    : [];
+  return `
+    <section class="admin-section manual-booking-section" id="nuevo-turno">
+      <div class="admin-section-header compact">
+        <div>
+          <p class="eyebrow">Carga manual</p>
+          <h2>+ Nuevo turno</h2>
+          <p>Para turnos pedidos por WhatsApp, telefono o en persona. Usa la misma disponibilidad del link publico.</p>
+        </div>
+        <small class="manual-booking-note">El envio de WhatsApp usa el flujo actual del sistema. Desactivarlo requiere un contrato backend nuevo.</small>
+      </div>
+      <form class="admin-form manual-booking-form" data-form="manual-booking">
+        <label><span>Cliente *</span><input name="customerName" autocomplete="name" required /></label>
+        <label><span>WhatsApp *</span><input name="customerPhone" type="tel" placeholder="Ej: 3549432877" required /></label>
+        <label>
+          <span>Servicio *</span>
+          <select name="serviceId" required>
+            ${services.map((service) => `<option value="${escapeHtml(service.id)}">${escapeHtml(service.name)}${service.requiresDeposit ? " - requiere sena" : ""}</option>`).join("")}
+          </select>
+        </label>
+        <label>
+          <span>Profesional *</span>
+          <select name="professionalId" required>
+            ${professionals.map((professional) => `<option value="${professional.id}">${escapeHtml(professional.name)}</option>`).join("")}
+          </select>
+        </label>
+        <label><span>Fecha *</span><input name="date" type="date" min="${today}" value="${today}" required /></label>
+        <label>
+          <span>Hora *</span>
+          <select name="time" required ${times.length ? "" : "disabled"}>
+            ${times.length ? times.map((time) => `<option value="${time}">${time}</option>`).join("") : `<option value="">No hay horarios disponibles</option>`}
+          </select>
+        </label>
+        <label class="check-field manual-whatsapp-field">
+          <input type="checkbox" checked disabled />
+          Enviar WhatsApp al cliente
+        </label>
+        <small data-manual-deposit-hint>${selectedService?.requiresDeposit ? `Este servicio quedara pendiente de sena (${formatPrice(selectedService.depositAmount)}).` : "Este turno se creara como confirmado."}</small>
+        <p class="form-error" hidden></p>
+        <button class="primary-button" type="submit" ${services.length && professionals.length ? "" : "disabled"}>Crear turno</button>
+      </form>
+    </section>
+  `;
+}
+
 function optionList(items, selected = "") {
   return items.map((item) => `<option value="${item.id}" ${Number(selected) === item.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("");
 }
@@ -898,10 +1058,12 @@ async function renderAdmin() {
           <input name="customer" type="search" placeholder="Buscar cliente" value="${escapeHtml(filterCustomer)}" />
           <input name="phone" type="search" placeholder="Buscar telefono" value="${escapeHtml(filterPhone)}" />
           <button class="secondary-button" type="button" data-action="today-filter">Hoy</button>
+          <button class="primary-button" type="button" data-action="focus-manual-booking">+ Nuevo turno</button>
           <button class="secondary-button" type="button" data-action="refresh-agenda">Actualizar turnos</button>
           <button class="secondary-button" type="submit">Buscar</button>
         </form>
       </div>
+      ${renderManualBooking()}
       <div class="admin-view-toggle" role="group" aria-label="Vista de agenda">
         <button class="${agendaViewMode === "agenda" ? "active" : ""}" type="button" data-action="view-agenda">Agenda</button>
         <button class="${agendaViewMode === "professional" ? "active" : ""}" type="button" data-action="view-professional">Por profesional</button>
@@ -961,6 +1123,10 @@ root.addEventListener("submit", async (event) => {
       await refreshReservationsOnly();
       return;
     }
+    if (form.dataset.form === "manual-booking") {
+      await createManualBooking(form, data);
+      return;
+    }
     if (form.dataset.form === "business-update") {
       const updated = await sendJson(`${BUSINESS_API_URL}/admin/business`, "PUT", data);
       businessDetails = normalizeBusiness(updated);
@@ -978,13 +1144,21 @@ root.addEventListener("submit", async (event) => {
     await refresh();
   } catch (error) {
     const errorElement = form.querySelector(".form-error");
-    if (errorElement) errorElement.hidden = false;
+    if (errorElement) {
+      errorElement.textContent = error.message || "No pudimos guardar el cambio.";
+      errorElement.hidden = false;
+    }
     else window.alert("No pudimos guardar el cambio.");
   }
 });
 
 root.addEventListener("change", async (event) => {
   const select = event.target.closest("[data-action='status']");
+  const manualField = event.target.closest("[data-form='manual-booking'] select, [data-form='manual-booking'] input[type='date']");
+  if (manualField) {
+    updateManualBookingTimes();
+    return;
+  }
   if (!select) return;
   const updated = await sendJson(`${BUSINESS_API_URL}/admin/reservations/${select.dataset.id}/status`, "PATCH", { status: select.value });
   const status = updated?.status || select.value;
@@ -1012,6 +1186,11 @@ root.addEventListener("click", async (event) => {
 
   if (action === "whatsapp") {
     openWhatsapp(id);
+    return;
+  }
+  if (action === "focus-manual-booking") {
+    const target = root.querySelector("#nuevo-turno");
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
   if (action === "copy-day") {

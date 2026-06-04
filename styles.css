@@ -3387,6 +3387,42 @@ body {
   border-radius: var(--radius-sm);
 }
 
+.cancel-direct-shell {
+  min-height: 100vh;
+  align-content: center;
+}
+
+.cancel-direct-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.cancel-direct-summary {
+  display: grid;
+  gap: 14px;
+}
+
+.cancel-direct-summary > strong {
+  color: var(--text-main);
+  font-size: 1.25rem;
+}
+
+.cancel-direct-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.cancel-direct-actions form {
+  margin: 0;
+}
+
+.cancel-direct-actions .cancel-page-action {
+  width: 100%;
+  min-height: 48px;
+  border-radius: var(--radius-sm);
+}
+
 .public-page .faq-list details {
   border-radius: var(--radius-md);
 }
@@ -3689,6 +3725,53 @@ body {
 
 .admin-page .copy-actions {
   justify-content: end;
+}
+
+.admin-page .manual-booking-section {
+  margin-top: 14px;
+  box-shadow: none;
+  background:
+    linear-gradient(180deg, rgba(238, 237, 254, 0.7), rgba(255, 255, 255, 0.96));
+}
+
+.admin-page .admin-section-header.compact {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.55fr);
+  align-items: end;
+}
+
+.manual-booking-note {
+  padding: 10px 12px;
+  border: 1px solid rgba(99, 91, 255, 0.18);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text-muted);
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.admin-page .manual-booking-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-page .manual-booking-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.admin-page .manual-booking-form label span,
+.admin-page .manual-booking-form small {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.admin-page .manual-whatsapp-field {
+  align-content: center;
+  min-height: 44px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
 }
 
 .admin-page .agenda-list {

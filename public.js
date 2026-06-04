@@ -34,6 +34,7 @@ const state = {
   customerPhone: "",
   assignedProfessionalName: "",
   cancelUrl: "",
+  notificationWarning: "",
 };
 
 function escapeHtml(value) {
@@ -414,16 +415,17 @@ function renderSuccess() {
         <div class="success-icon">OK</div>
         <p>Reserva recibida</p>
         <h2>Tu turno quedo registrado</h2>
-        <span>Ahora te enviaremos por WhatsApp la informacion necesaria para completar la sena y confirmar la reserva.</span>
+        <span>${state.notificationWarning ? "El turno fue creado correctamente, pero la notificacion automatica no pudo enviarse." : "Ahora te enviaremos por WhatsApp la informacion necesaria para completar la sena y confirmar la reserva."}</span>
         <div class="summary-box">
           <strong>${escapeHtml(businessName)}</strong>
           <span>Servicio: ${escapeHtml(state.service.name)}</span>
           <span>Profesional: ${escapeHtml(state.assignedProfessionalName)}</span>
           <span>Fecha: ${escapeHtml(state.date.label)}</span>
-          <span>Horario: ${escapeHtml(state.time)}</span>
-          <span>Sena: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
-          ${paymentInstructions ? `<span>${escapeHtml(paymentInstructions)}</span>` : ""}
-        </div>
+        <span>Horario: ${escapeHtml(state.time)}</span>
+        <span>Sena: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
+        ${paymentInstructions ? `<span>${escapeHtml(paymentInstructions)}</span>` : ""}
+      </div>
+        ${state.notificationWarning ? `<p class="cancel-warning">${escapeHtml(state.notificationWarning)}</p>` : ""}
         ${whatsappLink ? `<a class="primary-button link-button whatsapp-button" href="${whatsappLink}" target="_blank" rel="noopener">Escribir al negocio</a>` : ""}
         ${state.cancelUrl ? `<a class="text-button link-button" href="${escapeHtml(state.cancelUrl)}">Cancelar turno</a>` : ""}
         <button class="primary-button" type="button" data-restart>Reservar otro turno</button>
@@ -438,7 +440,7 @@ function renderSuccess() {
       <div class="success-icon">OK</div>
       <p>Listo</p>
       <h2>Tu turno quedo registrado correctamente</h2>
-      <span>En unos instantes recibiras la confirmacion por WhatsApp con todos los detalles. Te esperamos.</span>
+      <span>${state.notificationWarning ? "El turno fue creado correctamente, pero la notificacion automatica no pudo enviarse." : "En unos instantes recibiras la confirmacion por WhatsApp con todos los detalles. Te esperamos."}</span>
       <div class="summary-box">
         <strong>${escapeHtml(businessName)}</strong>
         <span>Servicio: ${escapeHtml(state.service.name)}</span>
@@ -447,6 +449,7 @@ function renderSuccess() {
         <span>Horario: ${escapeHtml(state.time)}</span>
         <span>${escapeHtml(state.customerName)} - ${escapeHtml(state.customerPhone)}</span>
       </div>
+      ${state.notificationWarning ? `<p class="cancel-warning">${escapeHtml(state.notificationWarning)}</p>` : ""}
       ${businessPhone ? `<a class="primary-button link-button whatsapp-button" href="${buildWhatsappLink(businessPhone, `Hola, tengo una reserva en ${businessName} para el dia ${state.date.label} a las ${state.time}.`, "3549")}" target="_blank" rel="noopener">Escribir al negocio</a>` : ""}
       ${state.cancelUrl ? `<a class="text-button link-button" href="${escapeHtml(state.cancelUrl)}">Cancelar turno</a>` : ""}
       <button class="primary-button" type="button" data-restart>Reservar otro turno</button>
@@ -497,6 +500,7 @@ async function confirmBooking() {
   const reservation = await response.json();
   state.assignedProfessionalName = reservation.professionalName || state.professional?.name || "Profesional asignado";
   state.cancelUrl = reservation.cancelToken ? `/${BUSINESS_SLUG}/cancelar/${reservation.cancelToken}` : "";
+  state.notificationWarning = reservation.notificationWarning || "";
 }
 
 root.addEventListener("click", (event) => {
@@ -544,6 +548,7 @@ root.addEventListener("click", (event) => {
       customerPhone: "",
       assignedProfessionalName: "",
       cancelUrl: "",
+      notificationWarning: "",
     });
     render();
   }

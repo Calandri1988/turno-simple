@@ -2270,8 +2270,22 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
     const row = await db.get("SELECT * FROM reservations WHERE id = ?", result.lastID);
     await db.exec("COMMIT");
     transactionStarted = false;
-    await enqueueBookingCreatedNotifications(business, row, req);
-    res.status(201).json(mapReservation(row));
+
+    let notificationWarning = "";
+    try {
+      await enqueueBookingCreatedNotifications(business, row, req);
+    } catch (notificationError) {
+      notificationWarning = "No fue posible enviar la notificacion por WhatsApp.";
+      console.error(
+        `[notifications] Reservation created but notification failed booking_id=${row.id}:`,
+        notificationError.message || notificationError,
+      );
+    }
+
+    res.status(201).json({
+      ...mapReservation(row),
+      ...(notificationWarning ? { notificationWarning } : {}),
+    });
   } catch (error) {
     if (transactionStarted) {
       await db.exec("ROLLBACK");
@@ -2433,28 +2447,37 @@ async function getBookingByCancelToken(slug, token) {
 
 function renderCancelPage({ business, booking, type }) {
   const title = type === "success"
-    ? "Turno cancelado"
+    ? "Turno cancelado correctamente"
     : type === "already"
-      ? "Este turno ya estaba cancelado"
+      ? "Este turno ya fue cancelado"
       : type === "invalid"
-        ? "No encontramos este turno"
+        ? "No pudimos encontrar este turno"
         : "Cancelar turno";
   const description = type === "success"
-    ? "Listo, cancelamos tu turno correctamente."
+    ? "Listo, registramos la cancelacion de tu reserva."
     : type === "already"
-      ? "No hace falta hacer nada mas."
+      ? "Este turno ya estaba cancelado. No hace falta hacer nada mas. Podes volver a reservar cuando quieras."
       : type === "invalid"
         ? "El enlace puede estar vencido o mal copiado. Si tenes dudas, comunicate con el negocio."
         : "Revisa los datos antes de confirmar la cancelacion.";
+  const businessName = business?.name || "Momentia";
+  const businessInitial = cleanText(businessName).charAt(0).toUpperCase() || "M";
   const details = booking
     ? `
-        <div class="summary-box">
+        <div class="cancel-direct-summary">
+          <span class="cancel-status-pill">${escapeHtml(booking.status || "reservado")}</span>
           <strong>${escapeHtml(booking.customer_name)}</strong>
-          <span>${escapeHtml(booking.service_name)}</span>
-          <span>${escapeHtml(formatDate(booking.date))} a las ${escapeHtml(booking.time)}</span>
+          <div class="cancel-booking-details">
+            <span><b>Servicio</b>${escapeHtml(booking.service_name)}</span>
+            <span><b>Profesional</b>${escapeHtml(booking.professional_name)}</span>
+            <span><b>Fecha</b>${escapeHtml(formatDate(booking.date))}</span>
+            <span><b>Hora</b>${escapeHtml(booking.time)}</span>
+          </div>
+          ${booking.deposit_status && booking.deposit_status !== "none" ? `<p class="cancel-warning">Este turno tiene una sena asociada. Si cancelas con poca anticipacion, consulta la politica del negocio.</p>` : ""}
         </div>
       `
     : "";
+  const actionLabel = type === "invalid" ? "Volver al negocio" : "Reservar otro turno";
   const action = type === "confirm"
     ? `
         <form method="post">
@@ -2462,7 +2485,7 @@ function renderCancelPage({ business, booking, type }) {
         </form>
       `
     : business
-      ? `<a class="primary-button link-button cancel-page-action" href="/${escapeHtml(business.slug)}">Reservar otro turno</a>`
+      ? `<a class="primary-button link-button cancel-page-action" href="/${escapeHtml(business.slug)}">${escapeHtml(actionLabel)}</a>`
       : "";
 
   return `<!doctype html>
@@ -2470,17 +2493,26 @@ function renderCancelPage({ business, booking, type }) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${escapeHtml(title)} - ${escapeHtml(business?.name || "Momentia")}</title>
+    <title>${escapeHtml(title)} - ${escapeHtml(businessName)}</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
-    <main class="app-shell cancel-page">
-      <section class="success-screen">
-        <p>${escapeHtml(business?.name || "Momentia")}</p>
-        <h1>${escapeHtml(title)}</h1>
-        <span>${escapeHtml(description)}</span>
+  <body class="public-page">
+    <main class="wizard-shell cancel-direct-shell">
+      <header class="wizard-hero booking-hero">
+        <div class="business-identity">
+          <div class="business-avatar" aria-hidden="true">${escapeHtml(businessInitial)}</div>
+          <div>
+            <p class="eyebrow">Gestion de reserva</p>
+            <h1>${escapeHtml(businessName)}</h1>
+            ${business?.address ? `<p class="business-meta">${escapeHtml(business.address)}</p>` : ""}
+          </div>
+        </div>
+        <p class="hero-copy">${escapeHtml(title)}</p>
+        <p class="hero-subcopy">${escapeHtml(description)}</p>
+      </header>
+      <section class="wizard-card cancel-direct-card">
         ${details}
-        ${action}
+        <div class="cancel-direct-actions">${action}</div>
       </section>
     </main>
   </body>

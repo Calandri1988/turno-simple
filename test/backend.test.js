@@ -698,6 +698,32 @@ test("crear reserva encola confirmacion y recordatorio", async () => {
   assert.equal(notifications.find((item) => item.type === "booking_reminder_24h").status, "pending");
 });
 
+test("si falla la notificacion, la reserva queda creada igualmente", async () => {
+  await withDb(async (db) => {
+    await db.run("ALTER TABLE notifications RENAME TO notifications_backup");
+  });
+
+  try {
+    const response = await createReservation({
+      customerName: "Cliente Sin Notificacion",
+      customerPhone: "3549504056",
+    });
+
+    assert.equal(response.status, 201);
+    assert.equal(response.body.notificationWarning, "No fue posible enviar la notificacion por WhatsApp.");
+
+    const reservation = await withDb((db) => db.get(
+      "SELECT * FROM reservations WHERE id = ?",
+      response.body.id,
+    ));
+    assert.equal(reservation.customer_name, "Cliente Sin Notificacion");
+  } finally {
+    await withDb(async (db) => {
+      await db.run("ALTER TABLE notifications_backup RENAME TO notifications");
+    });
+  }
+});
+
 test("no encola recordatorio si el turno empieza en menos de 24 horas", async () => {
   const soon = new Date(Date.now() + 2 * 60 * 60 * 1000);
   const date = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, "0")}-${String(soon.getDate()).padStart(2, "0")}`;
