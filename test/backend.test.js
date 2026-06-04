@@ -710,7 +710,7 @@ test("si falla la notificacion, la reserva queda creada igualmente", async () =>
     });
 
     assert.equal(response.status, 201);
-    assert.equal(response.body.notificationWarning, "No fue posible enviar la notificacion por WhatsApp.");
+    assert.equal(response.body.notificationWarning, "No fue posible enviar la notificación por WhatsApp.");
 
     const reservation = await withDb((db) => db.get(
       "SELECT * FROM reservations WHERE id = ?",

@@ -775,7 +775,7 @@ function renderAdminPanel() {
       renderAdminManagement(),
       createElementFromHtml(`
         <div class="empty-admin">
-          <strong>Sin turnos todavia</strong>
+          <strong>Sin turnos todavía</strong>
           <span>Cuando alguien confirme una reserva, va a aparecer aca.</span>
         </div>
       `),
@@ -1143,7 +1143,7 @@ function openReservationWhatsapp(id) {
   const message = `Hola ${reservation.customerName}. Tu turno en ${businessName} esta reservado para el ${formatDateLabel(reservation.date)} a las ${reservation.time}. Servicio: ${reservation.serviceName}. Profesional: ${reservation.professionalName}. Si necesitas modificarlo o cancelarlo, comunicate con nosotros.`;
   const link = buildWhatsappLink(reservation.customerPhone, message, "3549");
   if (!link) {
-    addMessage("Ese turno no tiene un telefono valido para WhatsApp.");
+    addMessage("Ese turno no tiene un teléfono válido para WhatsApp.");
     return;
   }
 
@@ -1184,7 +1184,7 @@ function renderCustomerForm() {
       <span>Telefono</span>
       <input id="customer-phone" name="phone" type="tel" autocomplete="tel" placeholder="Ej: 11 5555 5555" />
     </label>
-    <p class="form-error" id="form-error" role="alert" hidden>Completa nombre y telefono para confirmar.</p>
+    <p class="form-error" id="form-error" role="alert" hidden>Completá nombre y teléfono para confirmar.</p>
     <button class="option-button confirm-button" type="submit">Confirmar turno</button>
   `;
 
@@ -1300,7 +1300,7 @@ function selectTime(time) {
   addMessage(time, "user");
   clearOptions();
   addMessage("Buenisimo. Antes de confirmarlo, dejame tus datos de contacto.");
-  addMessage("Necesito tu nombre y telefono para identificar la reserva.");
+  addMessage("Necesito tu nombre y teléfono para identificar la reserva.");
   renderCustomerForm();
 }
 

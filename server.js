@@ -1910,7 +1910,7 @@ app.post("/api/businesses/:slug/admin/test-whatsapp-template", requireAdmin, asy
     res.status(400).json({
       error: !normalizedTo.ok
         ? "Ingresá el número con código de área. Ejemplo: 3549432877."
-        : "Indica un telefono y una plantilla aprobada.",
+        : "Indicá un teléfono y una plantilla aprobada.",
       allowedTemplates: [
         "booking_confirmed",
         "booking_payment_request",
@@ -2275,7 +2275,7 @@ app.post("/api/businesses/:slug/reservations", async (req, res) => {
     try {
       await enqueueBookingCreatedNotifications(business, row, req);
     } catch (notificationError) {
-      notificationWarning = "No fue posible enviar la notificacion por WhatsApp.";
+      notificationWarning = "No fue posible enviar la notificación por WhatsApp.";
       console.error(
         `[notifications] Reservation created but notification failed booking_id=${row.id}:`,
         notificationError.message || notificationError,
@@ -2473,7 +2473,7 @@ function renderCancelPage({ business, booking, type }) {
             <span><b>Fecha</b>${escapeHtml(formatDate(booking.date))}</span>
             <span><b>Hora</b>${escapeHtml(booking.time)}</span>
           </div>
-          ${booking.deposit_status && booking.deposit_status !== "none" ? `<p class="cancel-warning">Este turno tiene una sena asociada. Si cancelas con poca anticipacion, consulta la politica del negocio.</p>` : ""}
+          ${booking.deposit_status && booking.deposit_status !== "none" ? `<p class="cancel-warning">Este turno tiene una seña asociada. Si cancelás con poca anticipación, consultá la política del negocio.</p>` : ""}
         </div>
       `
     : "";

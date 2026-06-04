@@ -113,7 +113,7 @@ function normalizeService(service) {
 function servicePaymentInstructions(service) {
   if (service.paymentInstructions) return service.paymentInstructions;
   if (service.requiresDeposit && businessPaymentAlias) {
-    return `Transferi la sena al alias: ${businessPaymentAlias}`;
+    return `Transferí la seña al alias: ${businessPaymentAlias}`;
   }
   return "";
 }
@@ -205,18 +205,18 @@ function getInitials(name) {
 function serviceMetaLabel(service) {
   const parts = [];
   if (service.durationMinutes) parts.push(`${service.durationMinutes} min`);
-  parts.push(service.requiresDeposit ? "Requiere sena" : "Sin sena");
+  parts.push(service.requiresDeposit ? "Requiere seña" : "Sin seña");
   return parts.join(" - ");
 }
 
 function statusLabel(status) {
   const labels = {
-    pendiente: "Pendiente de sena",
+    pendiente: "Pendiente de seña",
     reservado: "Reservado",
     confirmado: "Confirmado",
     cancelado: "Cancelado",
-    asistio: "Asistio",
-    no_asistio: "No asistio",
+    asistio: "Asistió",
+    no_asistio: "No asistió",
   };
   return labels[status] || status;
 }
@@ -244,7 +244,7 @@ function renderCancelResults(reservations, customerName, customerPhone) {
         <span><b>Fecha</b>${escapeHtml(formatDateLabel(reservation.date))}</span>
         <span><b>Horario</b>${escapeHtml(reservation.time)}</span>
       </div>
-      ${reservation.depositWarning ? `<p class="cancel-warning">Este turno tiene sena registrada. Si cancelas con menos de 24 horas de anticipacion, la sena podria no ser reintegrable segun la politica del negocio.</p>` : ""}
+      ${reservation.depositWarning ? `<p class="cancel-warning">Este turno tiene seña registrada. Si cancelás con menos de 24 horas de anticipación, la seña podría no ser reintegrable según la política del negocio.</p>` : ""}
       <button class="danger-button cancel-booking-button" type="button" data-public-cancel="${reservation.id}" data-name="${escapeHtml(customerName)}" data-phone="${escapeHtml(customerPhone)}" ${reservation.canCancel ? "" : "disabled"}>Cancelar turno</button>
     </article>
   `).join("");
@@ -292,7 +292,7 @@ function renderServices() {
         <span class="choice-main">
           <strong>${escapeHtml(service.name)}</strong>
           <small>${escapeHtml(serviceMetaLabel(service))}</small>
-          ${service.requiresDeposit ? `<em class="deposit-note">Sena: ${escapeHtml(formatPrice(service.depositAmount))}</em>` : ""}
+          ${service.requiresDeposit ? `<em class="deposit-note">Seña: ${escapeHtml(formatPrice(service.depositAmount))}</em>` : ""}
         </span>
         <span class="choice-side">
           ${service.price !== null ? `<strong>${escapeHtml(formatPrice(service.price))}</strong>` : `<strong>Consultar</strong>`}
@@ -370,10 +370,10 @@ function renderCustomer() {
   const paymentInstructions = servicePaymentInstructions(state.service);
   const depositInfo = state.service.requiresDeposit
     ? `<div class="deposit-box">
-        <strong>Este servicio requiere una sena para confirmar la reserva.</strong>
-        <span>Monto de sena: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
+        <strong>Este servicio requiere una seña para confirmar la reserva.</strong>
+        <span>Monto de seña: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
         ${paymentInstructions ? `<span>${escapeHtml(paymentInstructions)}</span>` : ""}
-        <small>Una vez realizada la reserva te enviaremos los datos de pago por WhatsApp. Tu turno quedara pendiente hasta registrar la sena.</small>
+        <small>Una vez realizada la reserva te enviaremos los datos de pago por WhatsApp. Tu turno quedará pendiente hasta registrar la seña.</small>
       </div>`
     : "";
   renderLayout(
@@ -397,7 +397,7 @@ function renderCustomer() {
         ${state.service.price !== null ? `<span><b>Precio</b> ${escapeHtml(formatPrice(state.service.price))}</span>` : ""}
       </div>
       ${depositInfo}
-      <p class="form-error" id="form-error" hidden>Completa nombre y telefono para confirmar.</p>
+      <p class="form-error" id="form-error" hidden>Completá nombre y teléfono para confirmar.</p>
       <button class="primary-button" type="submit">Confirmar turno</button>
       <button class="text-button" type="button" data-back="3">Volver</button>
     </form>`,
@@ -406,7 +406,7 @@ function renderCustomer() {
 
 function renderSuccess() {
   const paymentInstructions = servicePaymentInstructions(state.service);
-  const depositMessage = `Hola, hice una reserva en ${businessName} para el dia ${state.date.label} a las ${state.time}. Te envio el comprobante de la sena.`;
+  const depositMessage = `Hola, hice una reserva en ${businessName} para el día ${state.date.label} a las ${state.time}. Te envío el comprobante de la seña.`;
   const whatsappLink = buildWhatsappLink(businessPhone, depositMessage, "3549");
   if (state.service.requiresDeposit) {
     progress.innerHTML = "";
@@ -415,14 +415,14 @@ function renderSuccess() {
         <div class="success-icon">OK</div>
         <p>Reserva recibida</p>
         <h2>Tu turno quedo registrado</h2>
-        <span>${state.notificationWarning ? "El turno fue creado correctamente, pero la notificacion automatica no pudo enviarse." : "Ahora te enviaremos por WhatsApp la informacion necesaria para completar la sena y confirmar la reserva."}</span>
+        <span>${state.notificationWarning ? "El turno fue creado correctamente, pero la notificación automática no pudo enviarse." : "Ahora te enviaremos por WhatsApp la información necesaria para completar la seña y confirmar la reserva."}</span>
         <div class="summary-box">
           <strong>${escapeHtml(businessName)}</strong>
           <span>Servicio: ${escapeHtml(state.service.name)}</span>
           <span>Profesional: ${escapeHtml(state.assignedProfessionalName)}</span>
           <span>Fecha: ${escapeHtml(state.date.label)}</span>
         <span>Horario: ${escapeHtml(state.time)}</span>
-        <span>Sena: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
+          <span>Seña: ${escapeHtml(formatPrice(state.service.depositAmount))}</span>
         ${paymentInstructions ? `<span>${escapeHtml(paymentInstructions)}</span>` : ""}
       </div>
         ${state.notificationWarning ? `<p class="cancel-warning">${escapeHtml(state.notificationWarning)}</p>` : ""}
@@ -440,7 +440,7 @@ function renderSuccess() {
       <div class="success-icon">OK</div>
       <p>Listo</p>
       <h2>Tu turno quedo registrado correctamente</h2>
-      <span>${state.notificationWarning ? "El turno fue creado correctamente, pero la notificacion automatica no pudo enviarse." : "En unos instantes recibiras la confirmacion por WhatsApp con todos los detalles. Te esperamos."}</span>
+      <span>${state.notificationWarning ? "El turno fue creado correctamente, pero la notificación automática no pudo enviarse." : "En unos instantes recibirás la confirmación por WhatsApp con todos los detalles. Te esperamos."}</span>
       <div class="summary-box">
         <strong>${escapeHtml(businessName)}</strong>
         <span>Servicio: ${escapeHtml(state.service.name)}</span>
@@ -573,7 +573,7 @@ root.addEventListener("submit", async (event) => {
       error.hidden = false;
       error.textContent = phone.error === "missing_area_code"
         ? "Ingresa el numero con codigo de area. Ejemplo: 3549432877."
-        : "Ingresa un WhatsApp valido.";
+        : "Ingresá un WhatsApp válido.";
       return;
     }
     state.customerPhone = phone.normalized;
@@ -609,7 +609,7 @@ if (cancelSearchForm) {
       cancelSearchError.hidden = false;
       cancelSearchError.textContent = phone.error === "missing_area_code"
         ? "Ingresa el numero con codigo de area. Ejemplo: 3549432877."
-        : "Ingresa nombre y WhatsApp validos.";
+        : "Ingresá nombre y WhatsApp válidos.";
       return;
     }
 

@@ -201,7 +201,7 @@ async function createManualBooking(form, data) {
   const notice = root.querySelector("[data-admin-notice]");
   if (notice) {
     notice.textContent = payload.notificationWarning
-      ? "Turno creado correctamente. No fue posible enviar la notificacion por WhatsApp."
+      ? "Turno creado correctamente. No fue posible enviar la notificación por WhatsApp."
       : "Turno creado correctamente.";
     notice.hidden = false;
   }
@@ -210,9 +210,9 @@ async function createManualBooking(form, data) {
 async function readErrorMessage(response) {
   try {
     const data = await response.json();
-    return data.error || "No pudimos completar la accion.";
+    return data.error || "No pudimos completar la acción.";
   } catch (error) {
-    return "No pudimos completar la accion.";
+    return "No pudimos completar la acción.";
   }
 }
 
@@ -305,7 +305,7 @@ function updateManualBookingTimes() {
   timeSelect.disabled = times.length === 0;
   if (depositHint) {
     depositHint.textContent = service?.requiresDeposit
-      ? `Este servicio quedara pendiente de sena (${formatPrice(service.depositAmount)}).`
+      ? `Este servicio quedará pendiente de seña (${formatPrice(service.depositAmount)}).`
       : "Este turno se creara como confirmado.";
   }
 }
@@ -367,7 +367,7 @@ async function login(email, password) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
-  if (!response.ok) throw new Error("Login invalido.");
+  if (!response.ok) throw new Error("No pudimos iniciar sesión.");
   const data = await response.json();
   token = data.token || "";
   localStorage.setItem(TOKEN_KEY, token);
@@ -547,7 +547,7 @@ function csvEscape(value) {
 }
 
 function downloadAgendaCsv() {
-  const headers = ["Fecha", "Hora", "Cliente", "Telefono", "Servicio", "Profesional", "Estado", "Precio", "Sena"];
+  const headers = ["Fecha", "Hora", "Cliente", "Teléfono", "Servicio", "Profesional", "Estado", "Precio", "Seña"];
   const rows = getFilteredAgendaItems().map((item) => [
     item.date,
     item.time,
@@ -580,7 +580,7 @@ function openWhatsapp(id) {
     : "";
   const link = buildWhatsappLink(reservation?.customerPhone, message, "3549");
   if (!reservation || !link) {
-    window.alert("Ese turno no tiene un telefono valido.");
+    window.alert("Ese turno no tiene un teléfono válido.");
     return;
   }
   window.open(link, "_blank");
@@ -654,7 +654,7 @@ function renderDashboard(items) {
       <small>${escapeHtml(formatDateLabel(filterDate))}</small>
     </div>
     <div class="admin-kpi-card warning">
-      <span>Pendientes de sena</span>
+      <span>Pendientes de seña</span>
       <strong>${counts.pending}</strong>
       <small>Revisar pagos</small>
     </div>
@@ -698,14 +698,14 @@ function renderAgendaList(items, emptyText) {
       </div>
       <div class="booking-money-block">
         <span>Precio ${escapeHtml(formatPrice(getReservationPrice(reservation)))}</span>
-        <small>Sena ${escapeHtml(formatPrice(getReservationDepositAmount(reservation)))}</small>
+        <small>Seña ${escapeHtml(formatPrice(getReservationDepositAmount(reservation)))}</small>
       </div>
       ${statusSelect(reservation)}
       <div class="booking-actions">
-        ${reservation.depositStatus === "pending" ? `<button class="secondary-button btn-confirm-payment" type="button" data-action="confirm-deposit" data-id="${reservation.id}">Confirmar sena</button>` : ""}
+        ${reservation.depositStatus === "pending" ? `<button class="secondary-button btn-confirm-payment" type="button" data-action="confirm-deposit" data-id="${reservation.id}">Confirmar seña</button>` : ""}
         <button class="secondary-button" type="button" data-action="whatsapp" data-id="${reservation.id}">WhatsApp</button>
-        <button class="secondary-button" type="button" data-action="quick-status" data-status="asistio" data-id="${reservation.id}">Asistio</button>
-        <button class="secondary-button" type="button" data-action="quick-status" data-status="no_asistio" data-id="${reservation.id}">No asistio</button>
+        <button class="secondary-button" type="button" data-action="quick-status" data-status="asistio" data-id="${reservation.id}">Asistió</button>
+        <button class="secondary-button" type="button" data-action="quick-status" data-status="no_asistio" data-id="${reservation.id}">No asistió</button>
         <button class="danger-button" type="button" data-action="cancel-status" data-id="${reservation.id}">Cancelar</button>
       </div>
     </article>
@@ -769,9 +769,9 @@ function renderManualBooking() {
         <div>
           <p class="eyebrow">Carga manual</p>
           <h2>+ Nuevo turno</h2>
-          <p>Para turnos pedidos por WhatsApp, telefono o en persona. Usa la misma disponibilidad del link publico.</p>
+          <p>Para turnos pedidos por WhatsApp, teléfono o en persona. Usa la misma disponibilidad del link público.</p>
         </div>
-        <small class="manual-booking-note">El envio de WhatsApp usa el flujo actual del sistema. Desactivarlo requiere un contrato backend nuevo.</small>
+        <small class="manual-booking-note">El envío de WhatsApp usa el flujo actual del sistema. Más adelante se podrá crear turnos sin aviso automático.</small>
       </div>
       <form class="admin-form manual-booking-form" data-form="manual-booking">
         <label><span>Cliente *</span><input name="customerName" autocomplete="name" required /></label>
@@ -779,7 +779,7 @@ function renderManualBooking() {
         <label>
           <span>Servicio *</span>
           <select name="serviceId" required>
-            ${services.map((service) => `<option value="${escapeHtml(service.id)}">${escapeHtml(service.name)}${service.requiresDeposit ? " - requiere sena" : ""}</option>`).join("")}
+            ${services.map((service) => `<option value="${escapeHtml(service.id)}">${escapeHtml(service.name)}${service.requiresDeposit ? " - requiere seña" : ""}</option>`).join("")}
           </select>
         </label>
         <label>
@@ -799,7 +799,7 @@ function renderManualBooking() {
           <input type="checkbox" checked disabled />
           Enviar WhatsApp al cliente
         </label>
-        <small data-manual-deposit-hint>${selectedService?.requiresDeposit ? `Este servicio quedara pendiente de sena (${formatPrice(selectedService.depositAmount)}).` : "Este turno se creara como confirmado."}</small>
+        <small data-manual-deposit-hint>${selectedService?.requiresDeposit ? `Este servicio quedará pendiente de seña (${formatPrice(selectedService.depositAmount)}).` : "Este turno se creará como confirmado."}</small>
         <p class="form-error" hidden></p>
         <button class="primary-button" type="submit" ${services.length && professionals.length ? "" : "disabled"}>Crear turno</button>
       </form>
@@ -923,7 +923,7 @@ function notificationStatusBadge(status) {
 
 function renderNotificationsTable(notifications) {
   if (notifications.length === 0) {
-    return `<tr><td colspan="10">No hay notificaciones todavia.</td></tr>`;
+    return `<tr><td colspan="10">No hay notificaciones todavía.</td></tr>`;
   }
 
   return notifications.map((notification) => {
@@ -992,8 +992,8 @@ async function renderNotificationsPanel() {
     <section class="admin-section notifications-panel">
       <div class="admin-section-header">
         <div>
-          <h2>Cola de notificaciones</h2>
-          <p>Ultimos mensajes encolados por este negocio.</p>
+          <h2>Notificaciones del negocio</h2>
+          <p>Últimos mensajes preparados para este negocio.</p>
         </div>
         <button id="btn-refresh-notifications" class="secondary-button" type="button" data-action="refresh-notifications">Actualizar</button>
       </div>
@@ -1011,7 +1011,7 @@ async function renderNotificationsPanel() {
               <th>Intentos</th>
               <th>Programado para</th>
               <th>Enviado en</th>
-              <th>Error</th>
+              <th>Detalle</th>
               <th>Mensaje</th>
             </tr>
           </thead>
@@ -1043,7 +1043,7 @@ async function renderAdmin() {
       <div class="admin-section-header">
         <div>
           <h2>Agenda del dia</h2>
-          <p>Turnos, pagos y acciones rapidas del negocio.</p>
+          <p>Turnos, pagos y acciones rápidas del negocio.</p>
         </div>
         <form id="filter-form" class="admin-filter">
           <input name="date" type="date" value="${escapeHtml(filterDate)}" />
@@ -1056,7 +1056,7 @@ async function renderAdmin() {
             ${statusOptions.map((status) => `<option value="${status}" ${status === filterStatus ? "selected" : ""}>${escapeHtml(getStatusLabel(status))}</option>`).join("")}
           </select>
           <input name="customer" type="search" placeholder="Buscar cliente" value="${escapeHtml(filterCustomer)}" />
-          <input name="phone" type="search" placeholder="Buscar telefono" value="${escapeHtml(filterPhone)}" />
+          <input name="phone" type="search" placeholder="Buscar teléfono" value="${escapeHtml(filterPhone)}" />
           <button class="secondary-button" type="button" data-action="today-filter">Hoy</button>
           <button class="primary-button" type="button" data-action="focus-manual-booking">+ Nuevo turno</button>
           <button class="secondary-button" type="button" data-action="refresh-agenda">Actualizar turnos</button>
